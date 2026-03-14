@@ -1,4 +1,4 @@
-# Member 1 - **Neeraj Gahlout** [Student Dashboard ]
+- Member 1 - **Neeraj Gahlout** [Student Dashboard ]
 # 🎓 CafeteriaToken — Student & Staff Portal
 
 Welcome to the premium frontend for the CFFMS Student Portal. This application is designed for students, teachers, and staff to order food seamlessly with a high-end, animated user experience.
@@ -48,8 +48,7 @@ To reset the system to a completely fresh state (0 orders, 0 users) during devel
 - **UI/UX**: Modern Glassmorphism & 3D Design
 - **Engineering**: VisionX Team
 
-
-## Member 2 **Prince Dubey** [ Vendor Dashboard ]
+-Member 2- **Prince Dubey** [ Vendor Dashboard ]
 
 # 🍱 CafeteriaToken — Vendor Dashboard
 
