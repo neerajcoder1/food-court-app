@@ -47,9 +47,9 @@ To reset the system to a completely fresh state (0 orders, 0 users) during devel
 ### 🎨 Design Credits
 - **UI/UX**: Modern Glassmorphism & 3D Design
 - **Engineering**: VisionX Team
+--
 
--Member 2- **Prince Dubey** [ Vendor Dashboard ]
-
+- Member 2- **Prince Dubey** [ Vendor Dashboard ]
 # 🍱 CafeteriaToken — Vendor Dashboard
 
 This is the central management portal for cafeteria vendors to process live orders, manage Kitchen Order Tickets (KOTs), and handle shop settings.
