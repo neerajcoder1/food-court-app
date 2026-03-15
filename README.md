@@ -10,16 +10,19 @@ Welcome to the premium frontend for the CFFMS Student Portal. This application i
 ## ✨ Premium Features
 
 ### 🍱 3D Interactive Order Tracking
+
 - **Visual Progress**: Real-time tracking with 3D bubble icons (⌛, 👨‍🍳, 🍱).
 - **Dynamic Styling**: The progress line and icons change color (Orange -> Blue -> Green) as the order moves through stages.
 - **Celebration Burst**: A confetti particle explosion triggers when the order is marked "Ready."
 
 ### 📜 Intelligent Order History
+
 - **Local Privacy**: Students can remove orders from their personal history view.
 - **Data Integrity**: Deleting an order in the student view **does not** delete it from the Vendor Dashboard, ensuring operational records remain safe.
 - **3D Interaction**: Satisfying slide-and-fade animations when removing items.
 
 ### 🔔 Smart Sound Notifications
+
 - **Web Audio API**: Uses a custom-synthesized 3-note chime (C-E-G major) to notify when food is ready.
 - **No External Assets**: Works entirely via code — no extra `.mp3` files required.
 - **Anti-Repeat**: Logic ensures the sound plays exactly once per order state.
@@ -35,13 +38,16 @@ This project currently uses `localStorage` for data persistence. To integrate yo
 3. **Hidden Orders**: Student-hidden history IDs are stored in `cffms_hidden_orders`.
 
 ## 🖥 Developer Tools
+
 To reset the system to a completely fresh state (0 orders, 0 users) during development:
+
 1. Open Browser Console (F12).
 2. Type `resetSystem()` and press Enter.
 
 ---
 
 ## 🚀 How to Run
+
 1. Open `index.html` in any modern web browser.
 2. Log in using a Student, Teacher, or Staff account.
 3. (Optional) Run `seed_menu.js` to populate the menu for testing.
@@ -49,6 +55,7 @@ To reset the system to a completely fresh state (0 orders, 0 users) during devel
 ---
 
 ### 🎨 Design Credits
+
 - **UI/UX**: Modern Glassmorphism & 3D Design
 - **Engineering**: VisionX Team
 
@@ -69,14 +76,14 @@ This is the central management portal for cafeteria vendors to process live orde
 
 Use these default credentials to access the dashboard:
 
-* **Vendor ID:** `vendor`
-* **Password:** `vendor123`
+- **Vendor ID:** `vendor`
+- **Password:** `vendor123`
 
 ### 2. 🔐 Administrative Overrides
 
 For sensitive operations (like accessing restricted billing logs or shop overrides):
 
-* **Master Password:** `admin123`
+- **Master Password:** `admin123`
 
 ---
 
@@ -84,14 +91,14 @@ For sensitive operations (like accessing restricted billing logs or shop overrid
 
 ### 📋 Live Order Queue
 
-* **Order Lifecycle**: Move orders from **Pending** ⏳ -> **Preparing** 👨‍🍳 -> **Ready** ✅ -> **Collected** ☑.
-* **Smart Notifications**: Marking an order as "Ready" automatically triggers a sound chime and a 3D celebration on the student's device.
-* **Real-time Stats**: Track active, pending, and ready counts instantly in the top bar.
+- **Order Lifecycle**: Move orders from **Pending** ⏳ -> **Preparing** 👨‍🍳 -> **Ready** ✅ -> **Collected** ☑.
+- **Smart Notifications**: Marking an order as "Ready" automatically triggers a sound chime and a 3D celebration on the student's device.
+- **Real-time Stats**: Track active, pending, and ready counts instantly in the top bar.
 
 ### 🧾 KOT & Billing
 
-* **Kitchen Flow**: Dedicated view for kitchen staff to handle active preparation tickets.
-* **Receipts**: Generate and preview customer bills and KOT prints.
+- **Kitchen Flow**: Dedicated view for kitchen staff to handle active preparation tickets.
+- **Receipts**: Generate and preview customer bills and KOT prints.
 
 ---
 
@@ -101,24 +108,138 @@ The dashboard logic is contained within `vendor-dashboard.html`.
 
 ### Key Persistence Keys:
 
-* **Orders**: `cffms_orders` (Master object for all transactions).
-* **Accounts**: `cffms_vendor_accounts` (Vendor login data).
-* **Hidden Orders**: For student-local deletions, the vendor dashboard **ignores** the `cffms_hidden_orders` key to ensure every order is accounted for.
+- **Orders**: `cffms_orders` (Master object for all transactions).
+- **Accounts**: `cffms_vendor_accounts` (Vendor login data).
+- **Hidden Orders**: For student-local deletions, the vendor dashboard **ignores** the `cffms_hidden_orders` key to ensure every order is accounted for.
 
 ### Integration Notes:
 
-* **WebSocket/Push**: The current dashboard "listens" to `localStorage` changes. For your real backend, implement a **WebSocket connection** to send/receive order status updates between the student and vendor in real-time.
+- **WebSocket/Push**: The current dashboard "listens" to `localStorage` changes. For your real backend, implement a **WebSocket connection** to send/receive order status updates between the student and vendor in real-time.
 
 ---
 
 ## 🖥 Developer Tools
 
-* **Deep Reset**: Open Console (F12) and type `resetSystem()` to wipe all test orders and start fresh.
+- **Deep Reset**: Open Console (F12) and type `resetSystem()` to wipe all test orders and start fresh.
 
 ---
 
 ### 🎨 Design
 
-* **Responsive Navigation**: Sidebar is optimized for tablets and mobile devices with a smart toggle and tap-to-close overlay.
-* **Theme**: Premium Dark/Light mode support.
+- **Responsive Navigation**: Sidebar is optimized for tablets and mobile devices with a smart toggle and tap-to-close overlay.
+- **Theme**: Premium Dark/Light mode support.
 
+# 👤 Contributor
+
+**Aryan Singh Thapa**  
+Role: **Payment Gateway Integration**
+
+---
+
+# 💳 CafeteriaToken — Payment System
+
+This module integrates the **Razorpay Payment Gateway** to enable secure online payments for student food orders in the CafeteriaToken system.
+
+## 🚀 Features
+
+### 🔐 Secure Online Payments
+
+- Integrated **Razorpay Checkout** for processing payments.
+- Supports **UPI, Cards, and Netbanking**.
+- Uses Razorpay **Test Mode** during development for safe testing.
+
+### 🧾 Payment Verification
+
+- After a payment is completed, the backend verifies the transaction using **Razorpay HMAC SHA256 signature verification**.
+- This ensures that the payment request is authentic and not tampered with.
+
+### 🗄 Transaction Logging
+
+Successful transactions are stored in a local database file (`database.json`) containing:
+
+- Razorpay Payment ID
+- Razorpay Order ID
+- Payment amount
+- User ID
+- Timestamp of transaction
+
+### 🎟 Token Generation
+
+After successful payment verification:
+
+- A **unique order token** is generated.
+- The token is displayed to the student.
+- Vendors use this token to identify and prepare orders.
+
+---
+
+## ⚙ Backend Architecture
+
+The payment system is implemented using **Node.js and Express**.
+
+### API Endpoints
+
+**GET /api/get-key**  
+Returns the Razorpay public key to the frontend.
+
+**POST /api/create-order**  
+Creates a new Razorpay order from the backend.
+
+**POST /api/verify-payment**  
+Verifies the Razorpay payment signature after successful payment.
+
+---
+
+## 🔄 Payment Flow
+
+Student Checkout  
+↓  
+Frontend requests order creation  
+↓  
+Backend creates Razorpay order  
+↓  
+Razorpay Checkout popup opens  
+↓  
+User completes payment  
+↓  
+Backend verifies payment signature  
+↓  
+Transaction stored  
+↓  
+Order token generated
+
+---
+
+## 🧪 Testing Payments
+
+During development Razorpay **Test Mode** is used.
+
+Test card details:
+
+Card Number: 4111 1111 1111 1111  
+Expiry: Any future date  
+CVV: 123  
+OTP: 123456
+
+No real money is processed.
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file inside the `payment-backend` folder:
+
+RAZORPAY_KEY_ID=rzp_test_xxxxx  
+RAZORPAY_KEY_SECRET=xxxxxxxx
+
+---
+
+## ▶ Running the Payment Server
+
+cd payment-backend  
+npm install  
+node server.js
+
+Server runs at:
+
+http://localhost:3000
