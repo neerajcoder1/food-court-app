@@ -131,6 +131,7 @@ The dashboard logic is contained within `vendor-dashboard.html`.
 
 # 👤 Contributor
 
+**Sai Srujan Murthy A N**  
 **Aryan Singh Thapa**  
 Role: **Payment Gateway Integration**
 
@@ -227,7 +228,7 @@ No real money is processed.
 
 ## 🔐 Environment Variables
 
-Create a `.env` file inside the `payment-backend` folder:
+Create a `.env` file inside the `payment` folder:
 
 RAZORPAY_KEY_ID=rzp_test_xxxxx  
 RAZORPAY_KEY_SECRET=xxxxxxxx
@@ -236,7 +237,7 @@ RAZORPAY_KEY_SECRET=xxxxxxxx
 
 ## ▶ Running the Payment Server
 
-cd payment-backend  
+cd payment
 npm install  
 node server.js
 
