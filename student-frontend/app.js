@@ -727,17 +727,21 @@ function renderOrderQr(order) {
   if (!qrCard || !qrTarget) return;
 
   const itemLines = (order.items || []).map(
-    (it) => `* ${it.name} x${it.qty || 1}`,
+    (it, idx) => `${idx + 1}. ${it.name} x${it.qty || 1}`,
   );
   const qrPayload = [
-    "CFFMS ORDER",
-    `Order ID: ${order.id}`,
-    `Token: ${order.token}`,
-    `Student: ${order.name}`,
-    `Payment: ${order.payment}`,
-    `Total: Rs ${order.total}`,
-    "Items:",
-    ...(itemLines.length ? itemLines : ["* No items"]),
+    "CFFMS FOOD COURT",
+    "------------------------------",
+    `TOKEN NO : ${order.token}`,
+    `STUDENT  : ${order.name}`,
+    `ORDER ID : ${order.id}`,
+    `TIME     : ${order.time || "--:--"}`,
+    `PAYMENT  : ${order.payment}`,
+    "------------------------------",
+    "ITEMS",
+    ...(itemLines.length ? itemLines : ["1. No items"]),
+    "------------------------------",
+    `TOTAL    : Rs ${order.total}`,
   ].join("\n");
 
   qrTarget.innerHTML = "";
