@@ -2806,30 +2806,10 @@
       };
 
       const ORDERS_KEY = "cffms_orders";
-      const API_URL = "http://localhost:3000/api/orders";
       let tokenCounter = 100;
       let orders = [];
       let qFilter = "all";
       let reportTab = "today";
-
-      // helper to load/save orders from backend
-      async function loadOrdersFromBackend() {
-        try {
-          const response = await fetch(API_URL);
-          if (response.ok) {
-            const backendOrders = await response.json();
-            if (Array.isArray(backendOrders)) {
-              orders = backendOrders;
-              // Sync with localStorage
-              localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-              return true;
-            }
-          }
-        } catch (err) {
-          console.log("Backend offline, using localStorage");
-        }
-        return false;
-      }
 
       // helper to load/save orders
       function loadOrdersFromStorage() {
@@ -2911,29 +2891,15 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(menuItems));
       }
 
-      document.addEventListener("DOMContentLoaded", async () => {
+      document.addEventListener("DOMContentLoaded", () => {
         loadVendorMenu();
-        
-        // Load from backend first, fall back to localStorage
-        const loadedFromBackend = await loadOrdersFromBackend();
-        if (!loadedFromBackend) {
-          loadOrdersFromStorage();
-        }
-        
+        loadOrdersFromStorage();
+
         // seedOrders(); // DISABLED
         renderMenu();
         renderQueue();
         renderDoorQrPage();
         initTheme();
-
-        // Poll backend every 3 seconds for new/updated orders
-        setInterval(async () => {
-          const wasUpdated = await loadOrdersFromBackend();
-          if (wasUpdated) {
-            renderQueue();
-            renderBilling();
-          }
-        }, 3000);
       });
 
       // ── THEME ──
@@ -3978,14 +3944,7 @@
         const o = orders.find((x) => x.id === id);
         if (!o) return;
         o.status = status;
-        
-        // Update backend
-        fetch(`${API_URL}/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: status }),
-        }).catch((err) => console.log("Backend offline - updated locally only", err));
-        
+
         renderQueue();
         saveOrdersToStorage(); // PERSIST STATUS UPDATE
         const msgs = {

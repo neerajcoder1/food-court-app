@@ -757,42 +757,18 @@ function renderOrderQr(order) {
 
 // helper to add order to shared storage
 function saveOrderToStorage(order) {
-  // Save to localStorage (backward compatibility)
   const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
   orders.push(order);
   localStorage.setItem("cffms_orders", JSON.stringify(orders));
-
-  // Also send to backend server for cross-device sync
-  const apiUrl = "http://localhost:3000/api/orders";
-  fetch(apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(order),
-  }).catch((err) => console.log("Backend offline - using localStorage only", err));
 }
 
 function startOrderTracking() {
   const orderId = sessionStorage.getItem("lastOrderId");
   if (!orderId) return;
 
-  const checkStatus = async () => {
-    let order = null;
-
-    // Try to fetch from backend first
-    try {
-      const response = await fetch(`http://localhost:3000/api/orders/${orderId}`);
-      if (response.ok) {
-        order = await response.json();
-      }
-    } catch (err) {
-      // Backend offline, fall back to localStorage
-    }
-
-    // Fall back to localStorage if backend unavailable
-    if (!order) {
-      const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
-      order = orders.find((o) => o.id === orderId);
-    }
+  const checkStatus = () => {
+    const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
+    const order = orders.find((o) => o.id === orderId);
 
     if (order) {
       const stepConfig = {
@@ -855,11 +831,6 @@ function startOrderTracking() {
   };
 
   checkStatus();
-
-  // Poll backend every 2 seconds for status updates
-  const pollInterval = setInterval(() => {
-    checkStatus();
-  }, 2000);
 
   // Also listen for storage changes
   window.addEventListener("storage", (e) => {
