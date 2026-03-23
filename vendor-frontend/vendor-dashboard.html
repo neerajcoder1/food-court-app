@@ -2961,28 +2961,8 @@
       }
 
       function getDefaultStudentAppUrl() {
-        // For GitHub Pages: use the direct public URL
-        const path = window.location.pathname.replace(/\\/g, "/");
-
-        // Check if we're on GitHub Pages
-        if (window.location.hostname.includes("github.io")) {
-          return "https://neerajcoder1.github.io/Food-Court-Application/student-frontend/index.html";
-        }
-
-        // For localhost: convert vendor path to student path
-        if (
-          window.location.protocol === "http:" ||
-          window.location.protocol === "https:"
-        ) {
-          const studentPath = path
-            .replace(
-              /\/vendor-frontend\/[^/]*$/i,
-              "/student-frontend/index.html",
-            )
-            .replace(/\/vendor\/[^/]*$/i, "/student-frontend/index.html");
-          return `${window.location.origin}${studentPath}`;
-        }
-
+        // Always use the public GitHub Pages URL for Door QR
+        // This ensures students can scan and access from any device
         return "https://neerajcoder1.github.io/Food-Court-Application/student-frontend/index.html";
       }
 
