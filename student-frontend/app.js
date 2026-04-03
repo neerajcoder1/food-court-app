@@ -10,7 +10,7 @@ let activeTrackedOrderId = null;
 
 // --- Config ---
 const STORAGE_KEY = "cffms_menu";
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = "https://food-court-app-bvu9.onrender.com";
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
   checkAuth();
