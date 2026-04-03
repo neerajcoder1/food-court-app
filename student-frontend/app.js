@@ -4,10 +4,13 @@ let menuItems = [];
 let currentCategory = "all";
 let currentSearchQuery = "";
 let currentTypeFilter = "all";
+let trackingPollTimer = null;
+let trackingStorageHandler = null;
+let activeTrackedOrderId = null;
 
 // --- Config ---
 const STORAGE_KEY = "cffms_menu";
-
+const BASE_URL = "http://localhost:5000";
 // --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
   checkAuth();
@@ -39,6 +42,8 @@ function checkAuth() {
       : "none";
     const histBtn = document.getElementById("history-btn");
     if (histBtn) histBtn.style.display = canOrder ? "flex" : "none";
+    const trackingBtn = document.getElementById("tracking-btn");
+    if (trackingBtn) trackingBtn.style.display = canOrder ? "flex" : "none";
 
     if (user.role === "vendor") {
       // Mock Vendor View
@@ -87,8 +92,8 @@ function handleLogin(e) {
         "cffms_vendor",
         JSON.stringify({ id: user.id, name: user.name }),
       );
-      // vendor dashboard lives in the sibling "vendor" folder
-      window.location.href = "../vendor/vendor-dashboard.html";
+      // vendor dashboard lives in the sibling "vendor-frontend" folder
+      window.location.href = "../vendor-frontend/vendor-dashboard.html";
       return;
     }
 
@@ -641,22 +646,106 @@ function selectRazorOpt(el) {
   el.classList.add("active");
 }
 
-function processRazorPay() {
-  const btnText = document.getElementById("razor-btn-text");
-  const spinner = document.getElementById("razor-spinner");
-  const btn = document.getElementById("razor-pay-btn");
+async function processRazorPay() {
+  try {
+    const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
-  btnText.style.display = "none";
-  spinner.style.display = "block";
-  btn.style.pointerEvents = "none";
+    // create order from backend
+    const orderRes = await fetch(`${BASE_URL}/api/create-order`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ amount: total }),
+    });
 
-  setTimeout(() => {
-    closeRazorModal();
-    generateToken();
-    btnText.style.display = "block";
-    spinner.style.display = "none";
-    btn.style.pointerEvents = "auto";
-  }, 2000);
+    const order = await orderRes.json();
+
+    // get razorpay key
+    const keyRes = await fetch(`${BASE_URL}/api/get-key`);
+    const { key } = await keyRes.json();
+
+    const options = {
+      key: key,
+      amount: order.amount,
+      currency: "INR",
+      name: "Food Court",
+      description: "Food Order Payment",
+      order_id: order.id,
+
+      handler: async function (response) {
+        const verifyRes = await fetch(`${BASE_URL}/api/verify-payment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            amount: total,
+          }),
+        });
+
+        const result = await verifyRes.json();
+
+        if (result.success) {
+          closeRazorModal();
+          handlePaymentSuccess(total);
+        } else {
+          showToast("Payment verification failed");
+        }
+      },
+
+      prefill: {
+        name: "User",
+      },
+
+      theme: {
+        color: "#3399cc",
+      },
+    };
+
+    const rzp = new Razorpay(options);
+    rzp.open();
+  } catch (error) {
+    console.error(error);
+    showToast("Payment failed");
+  }
+}
+
+function handlePaymentSuccess(total) {
+  const user = JSON.parse(localStorage.getItem("cffms_user")) || {
+    name: "Guest",
+  };
+
+  const token = Math.floor(100 + Math.random() * 900);
+
+  const order = {
+    id: "ORD" + Date.now(),
+    token,
+    name: user.name,
+    items: cart.map((i) => ({ ...i })),
+    total,
+    status: "pending",
+    time: new Date().toLocaleTimeString(),
+    payment: "UPI",
+  };
+
+  const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
+  orders.push(order);
+  localStorage.setItem("cffms_orders", JSON.stringify(orders));
+
+  sessionStorage.setItem("lastOrderId", order.id);
+
+  cart = [];
+  updateCartUI();
+
+  hydrateTokenView(order);
+  updateTrackingExperience(order);
+
+  showView("token-view");
+  startOrderTracking();
 }
 
 function confirmOrder() {
@@ -664,7 +753,11 @@ function confirmOrder() {
     document.querySelector('input[name="payment"]:checked').value === "online";
 
   if (isOnline) {
-    openRazorModal();
+    if (typeof window.Razorpay !== "function") {
+      showToast("Razorpay SDK not loaded. Please refresh and try again.");
+      return;
+    }
+    processRazorPay();
   } else {
     generateToken();
   }
@@ -708,8 +801,8 @@ function generateToken() {
   saveOrderToStorage(order);
   sessionStorage.setItem("lastOrderId", order.id); // Track this order
 
-  // Generate pickup QR for quick scan at the counter
-  renderOrderQr(order);
+  hydrateTokenView(order);
+  updateTrackingExperience(order);
 
   cart = []; // Clear cart
   updateCartUI();
@@ -719,51 +812,6 @@ function generateToken() {
   startOrderTracking();
 }
 
-function renderOrderQr(order) {
-  const qrCard = document.getElementById("order-qr-card");
-  const qrTarget = document.getElementById("order-qr");
-  const qrOrderId = document.getElementById("qr-order-id");
-
-  if (!qrCard || !qrTarget) return;
-
-  const itemLines = (order.items || []).map(
-    (it, idx) => `${idx + 1}. ${it.name} x${it.qty || 1}`,
-  );
-  const qrPayload = [
-    "CFFMS FOOD COURT",
-    "------------------------------",
-    `TOKEN NO : ${order.token}`,
-    `STUDENT  : ${order.name}`,
-    `ORDER ID : ${order.id}`,
-    `TIME     : ${order.time || "--:--"}`,
-    `PAYMENT  : ${order.payment}`,
-    "------------------------------",
-    "ITEMS",
-    ...(itemLines.length ? itemLines : ["1. No items"]),
-    "------------------------------",
-    `TOTAL    : Rs ${order.total}`,
-  ].join("\n");
-
-  qrTarget.innerHTML = "";
-  qrCard.style.display = "block";
-  if (qrOrderId) qrOrderId.innerText = `Order ID: ${order.id}`;
-
-  if (typeof window.QRCode !== "function") {
-    qrTarget.innerHTML =
-      '<p style="color:#111;font-weight:700;font-size:12px;padding:10px">QR library failed to load</p>';
-    return;
-  }
-
-  new window.QRCode(qrTarget, {
-    text: qrPayload,
-    width: 180,
-    height: 180,
-    colorDark: "#111111",
-    colorLight: "#ffffff",
-    correctLevel: window.QRCode.CorrectLevel.H,
-  });
-}
-
 // helper to add order to shared storage
 function saveOrderToStorage(order) {
   const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
@@ -771,15 +819,96 @@ function saveOrderToStorage(order) {
   localStorage.setItem("cffms_orders", JSON.stringify(orders));
 }
 
-function startOrderTracking() {
-  const orderId = sessionStorage.getItem("lastOrderId");
+function hydrateTokenView(order) {
+  if (!order) return;
+
+  const tokenEl = document.getElementById("token-number");
+  if (tokenEl) tokenEl.innerText = `#${order.token}`;
+
+  const tokenItems = document.getElementById("token-items");
+  if (tokenItems) {
+    tokenItems.innerHTML = (order.items || [])
+      .map(
+        (item) => `
+        <div class="mini-item">
+            <span>${item.name} (x${item.qty || 1})</span>
+        </div>
+    `,
+      )
+      .join("");
+  }
+}
+
+function updateTrackingExperience(order) {
+  if (!order) return;
+
+  const status = order.status || "pending";
+  const boy = document.getElementById("delivery-boy");
+  const liveText = document.getElementById("tracking-live-text");
+  const finishBtn = document.getElementById("token-finish-btn");
+
+  const roadPos = {
+    pending: 6,
+    preparing: 44,
+    ready: 78,
+    completed: 95,
+  };
+
+  const messages = {
+    pending: "Token generated. Boy is going to vendor road...",
+    preparing: "Vendor accepted the order. Food is being prepared...",
+    ready: "Food is ready for pickup at the counter!",
+    completed: "Order completed by vendor. You can finish now.",
+  };
+
+  if (boy) {
+    const leftPct = roadPos[status] ?? roadPos.pending;
+    boy.style.left = `calc(${leftPct}% - 12px)`;
+  }
+
+  if (liveText) {
+    liveText.innerText = messages[status] || messages.pending;
+  }
+
+  if (finishBtn) {
+    const isCompleted = status === "completed";
+    const isReady = status === "ready";
+
+    finishBtn.style.display = isReady ? "none" : "block";
+    finishBtn.disabled = !isCompleted;
+    finishBtn.innerText = isCompleted
+      ? "Finish & New Order"
+      : "Waiting for Vendor Completion...";
+  }
+}
+
+function startOrderTracking(forOrderId) {
+  const orderId = forOrderId || sessionStorage.getItem("lastOrderId");
   if (!orderId) return;
 
+  activeTrackedOrderId = orderId;
+
+  if (trackingPollTimer) {
+    clearInterval(trackingPollTimer);
+    trackingPollTimer = null;
+  }
+
+  if (trackingStorageHandler) {
+    window.removeEventListener("storage", trackingStorageHandler);
+    trackingStorageHandler = null;
+  }
+
   const checkStatus = () => {
+    // Ignore stale callbacks from previously tracked orders.
+    if (activeTrackedOrderId !== orderId) return;
+
     const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
     const order = orders.find((o) => o.id === orderId);
 
     if (order) {
+      hydrateTokenView(order);
+      updateTrackingExperience(order);
+
       const stepConfig = {
         pending: { steps: ["step-waiting"], width: "0%", color: "#f97316" },
         preparing: {
@@ -841,12 +970,17 @@ function startOrderTracking() {
 
   checkStatus();
 
-  // Also listen for storage changes
-  window.addEventListener("storage", (e) => {
+  trackingStorageHandler = (e) => {
     if (e.key === "cffms_orders") {
       checkStatus();
     }
-  });
+  };
+
+  // React immediately when vendor updates in another tab/window.
+  window.addEventListener("storage", trackingStorageHandler);
+
+  // Fallback polling keeps UI correct even when storage events are missed.
+  trackingPollTimer = setInterval(checkStatus, 2000);
 }
 
 // --- UI Helpers ---
@@ -1050,6 +1184,31 @@ function playReadyChime() {
 function showHistory() {
   showView("history-view");
   renderOrderHistory();
+}
+
+function showTrackingStatus() {
+  const orderId = sessionStorage.getItem("lastOrderId");
+  if (!orderId) {
+    showToast("No active order to track yet.");
+    return;
+  }
+
+  const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
+  const order = orders.find((o) => o.id === orderId);
+  if (!order) {
+    showToast("Active order not found.");
+    return;
+  }
+
+  hydrateTokenView(order);
+  updateTrackingExperience(order);
+
+  showView("token-view");
+  startOrderTracking();
+}
+
+function goBackFromTracking() {
+  showView("menu-view");
 }
 
 function renderOrderHistory() {

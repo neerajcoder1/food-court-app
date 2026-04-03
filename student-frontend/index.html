@@ -45,6 +45,16 @@
           <span class="history-label">History</span>
         </button>
         <button
+          id="tracking-btn"
+          class="icon-btn"
+          onclick="showTrackingStatus()"
+          title="Tracking Status"
+          style="display: none"
+        >
+          <span class="icon">📍</span>
+          <span class="tracking-label">Tracking</span>
+        </button>
+        <button
           id="theme-toggle-btn"
           class="icon-btn"
           onclick="toggleTheme()"
@@ -132,7 +142,12 @@
             </div>
             <div class="input-group">
               <label>Select Role</label>
-              <select id="signup-role" required>
+              <select
+                title="Select your role"
+                required
+                id="signup-role"
+                required
+              >
                 <option value="student">Student</option>
                 <option value="teacher">Teacher</option>
                 <option value="staff">Staff</option>
@@ -304,7 +319,16 @@
       <!-- Token View -->
       <section id="token-view" class="view">
         <div class="token-success-card">
-          <div class="success-icon">✅</div>
+          <button
+            class="back-btn tracking-back-btn"
+            onclick="goBackFromTracking()"
+          >
+            ← Back to Menu
+          </button>
+          <div class="success-icon" aria-hidden="true">
+            <span class="success-icon-ring"></span>
+            <span class="success-icon-tick">✓</span>
+          </div>
           <h2>Order Placed Successfully!</h2>
           <div class="token-box">
             <span class="token-label">Your Token Number</span>
@@ -313,18 +337,6 @@
           <div class="order-details">
             <h3>Order Details</h3>
             <div id="token-items" class="mini-list"></div>
-          </div>
-          <div class="qr-card" id="order-qr-card">
-            <h3>Pickup QR</h3>
-            <p class="qr-help">
-              Show this QR at the counter for quick verification.
-            </p>
-            <div
-              id="order-qr"
-              class="qr-canvas"
-              aria-label="Order QR code"
-            ></div>
-            <p id="qr-order-id" class="qr-order-id"></p>
           </div>
           <div class="status-tracker">
             <div class="progress-line" id="progress-line"></div>
@@ -427,11 +439,25 @@
               <span>Ready</span>
             </div>
           </div>
+
+          <div class="live-delivery-panel">
+            <div class="road-track">
+              <div class="road-line"></div>
+              <div class="vendor-point">🏪</div>
+              <div class="delivery-boy" id="delivery-boy">🧍</div>
+            </div>
+            <p id="tracking-live-text" class="tracking-live-text">
+              Live tracking started. Heading to vendor...
+            </p>
+          </div>
+
           <button
+            id="token-finish-btn"
             class="primary-btn secondary-btn"
+            disabled
             onclick="window.location.reload()"
           >
-            Finish & New Order
+            Waiting for Vendor Completion...
           </button>
         </div>
       </section>
@@ -525,7 +551,7 @@
       </p>
     </footer>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="app.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   </body>
 </html>

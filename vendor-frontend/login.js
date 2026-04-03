@@ -34,8 +34,8 @@ document.addEventListener("DOMContentLoaded", () => {
         "cffms_vendor",
         JSON.stringify({ id: user.id, name: user.name }),
       );
-      // navigate to dashboard
-     window.location.href = "/vendor-dashboard.html";
+      // navigate to dashboard in the same folder
+      window.location.href = "vendor-dashboard.html";
     } else {
       errorText.textContent = "Invalid Vendor ID or Password.";
       errorMsg.classList.add("show");

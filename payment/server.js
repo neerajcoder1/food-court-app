@@ -1,10 +1,10 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const Razorpay = require('razorpay');
-const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs');
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const Razorpay = require("razorpay");
+const path = require("path");
+const crypto = require("crypto");
+const fs = require("fs");
 
 dotenv.config();
 
@@ -12,61 +12,84 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
+// optional static (safe fallback)
+app.use(express.static(path.join(__dirname, "public")));
+
+// validate env
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_SECRET) {
+  console.error("Missing Razorpay keys in .env");
+  process.exit(1);
+}
+
+// razorpay instance
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+  key_secret: process.env.RAZORPAY_SECRET,
 });
 
-app.post('/api/create-order', async (req, res) => {
+// create order
+app.post("/api/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
+
+    if (!amount) {
+      return res.status(400).json({ error: "Amount is required" });
+    }
+
     const order = await razorpay.orders.create({
       amount: amount * 100,
-      currency: 'INR',
-      receipt: 'receipt_' + Date.now(),
+      currency: "INR",
+      receipt: "receipt_" + Date.now(),
     });
+
     res.json(order);
   } catch (error) {
-    res.status(500).send(error);
+    console.error(error);
+    res.status(500).json({ error: "Order creation failed" });
   }
 });
 
-app.post('/api/verify-payment', (req, res) => {
-  const {
-    razorpay_order_id,
-    razorpay_payment_id,
-    razorpay_signature,
-    amount,
-    user_id,
-  } = req.body;
+// verify payment
+app.post("/api/verify-payment", (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      amount,
+      user_id,
+    } = req.body;
 
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-    .update(razorpay_order_id + '|' + razorpay_payment_id)
-    .digest('hex');
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
 
-  if (expectedSignature === razorpay_signature) {
+    if (expectedSignature !== razorpay_signature) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid signature" });
+    }
+
     const transaction = {
       payment_id: razorpay_payment_id,
       order_id: razorpay_order_id,
-      amount: amount,
-      status: 'success',
-      user_id: user_id,
+      amount,
+      status: "success",
+      user_id,
       timestamp: new Date().toISOString(),
     };
 
+    const dbPath = path.join(__dirname, "database.json");
+
     let database = [];
-    try {
-      const data = fs.readFileSync('database.json');
-      database = JSON.parse(data);
-    } catch (error) {
-      // File doesn't exist, will be created
+    if (fs.existsSync(dbPath)) {
+      database = JSON.parse(fs.readFileSync(dbPath));
     }
 
     database.push(transaction);
-    fs.writeFileSync('database.json', JSON.stringify(database, null, 2));
+    fs.writeFileSync(dbPath, JSON.stringify(database, null, 2));
 
     const generated_token = (Math.floor(Math.random() * 900) + 100).toString();
 
@@ -75,16 +98,20 @@ app.post('/api/verify-payment', (req, res) => {
       transactionId: razorpay_payment_id,
       token: generated_token,
     });
-  } else {
-    res.status(400).json({ success: false, message: 'Invalid signature' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Verification failed" });
   }
 });
 
-app.get('/api/get-key', (req, res) => {
-  res.status(200).json({ key: process.env.RAZORPAY_KEY_ID });
+// expose key
+app.get("/api/get-key", (req, res) => {
+  res.json({ key: process.env.RAZORPAY_KEY_ID });
 });
 
-const PORT = 3000;
+// use env port
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);
 });
