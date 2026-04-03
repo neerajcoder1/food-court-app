@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // validate env
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_SECRET) {
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
   console.error("Missing Razorpay keys in .env");
   process.exit(1);
 }
@@ -25,7 +25,7 @@ if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_SECRET) {
 // razorpay instance
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_SECRET,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // create order
@@ -62,7 +62,7 @@ app.post("/api/verify-payment", (req, res) => {
     } = req.body;
 
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
