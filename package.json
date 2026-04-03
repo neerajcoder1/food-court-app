@@ -1,0 +1,24 @@
+{
+  "name": "food-court-application",
+  "version": "1.0.0",
+  "description": "**Neeraj Gahlout**\r Role: **Student Dashboard Development**",
+  "main": "generateQR.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neerajcoder1/food-court-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/neerajcoder1/food-court-app/issues"
+  },
+  "homepage": "https://github.com/neerajcoder1/food-court-app#readme",
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,12 +1,40 @@
+// ── FIREBASE (orders realtime) ──
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "food-court-app-ae48f.firebaseapp.com",
+  projectId: "food-court-app-ae48f",
+  storageBucket: "food-court-app-ae48f.appspot.com",
+  messagingSenderId: "575018100354",
+  appId: "YOUR_APP_ID",
+};
+
+let db = null;
+let auth = null;
+if (typeof firebase !== "undefined") {
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  db = firebase.firestore();
+  if (typeof firebase.auth === "function") {
+    auth = firebase.auth();
+  }
+  window.db = db;
+  window.auth = auth;
+}
+
 // --- State Management ---
 let cart = [];
 let menuItems = [];
+let menuItemsByCategory = {};
 let currentCategory = "all";
 let currentSearchQuery = "";
 let currentTypeFilter = "all";
 let trackingPollTimer = null;
 let trackingStorageHandler = null;
 let activeTrackedOrderId = null;
+let menuUnsubscribe = null;
+let orderTrackingUnsubscribe = null;
+let historyUnsubscribe = null;
 
 // --- Config ---
 const STORAGE_KEY = "cffms_menu";
@@ -23,6 +51,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // --- User Accounts Management ---
 const ACCOUNTS_KEY = "cffms_accounts";
+
+function toAuthEmail(id, role) {
+  const safeId = (id || "").toString().trim().toLowerCase();
+  const safeRole = (role || "user").toString().trim().toLowerCase();
+  return `${safeRole}.${safeId}@cffms.local`;
+}
 
 function checkAuth() {
   const user = JSON.parse(localStorage.getItem("cffms_user"));
@@ -46,20 +80,16 @@ function checkAuth() {
     if (trackingBtn) trackingBtn.style.display = canOrder ? "flex" : "none";
 
     if (user.role === "vendor") {
-      // Mock Vendor View
-      document.getElementById("menu-view").innerHTML = `
-                <header class="view-header">
-                    <h1>Vendor Dashboard</h1>
-                    <p>Manage your cafeteria menu and orders</p>
-                </header>
-                <div class="empty-state">
-                    <p>Vendor Dashboard is coming soon in the next update!</p>
-                    <button class="primary-btn" onclick="logout()">Logout</button>
-                </div>
-            `;
-    } else {
-      loadMenu();
+      sessionStorage.setItem(
+        "cffms_vendor",
+        JSON.stringify({ id: user.id, name: user.name }),
+      );
+      localStorage.setItem("role", "vendor");
+      window.location.replace("vendor-dashboard.html");
+      return;
     }
+
+    loadMenu();
     showView("menu-view");
   }
 }
@@ -70,46 +100,67 @@ function handleLogin(e) {
   const role = document.getElementById("login-role").value;
   const pass = document.getElementById("login-password").value;
 
+  if (!auth) {
+    showToast("Firebase Auth is not configured.");
+    return;
+  }
+
   const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || [];
   const user = accounts.find(
     (acc) => acc.id === id && acc.role === role && acc.password === pass,
   );
-
-  if (user) {
-    if (role === "vendor") {
-      // register vendor in separate storage so vendor portal recognizes them
-      const vendAccounts =
-        JSON.parse(localStorage.getItem("cffms_vendor_accounts")) || [];
-      if (!vendAccounts.some((v) => v.id === id)) {
-        vendAccounts.push({ id, password: pass, name: user.name });
-        localStorage.setItem(
-          "cffms_vendor_accounts",
-          JSON.stringify(vendAccounts),
-        );
-      }
-      // sign vendor in and redirect to vendor dashboard page
-      sessionStorage.setItem(
-        "cffms_vendor",
-        JSON.stringify({ id: user.id, name: user.name }),
-      );
-      // vendor dashboard lives in the sibling "vendor-frontend" folder
-      window.location.href = "../vendor-frontend/vendor-dashboard.html";
-      return;
-    }
-
-    localStorage.setItem(
-      "cffms_user",
-      JSON.stringify({
-        name: user.name,
-        id: user.id,
-        role: user.role,
-      }),
-    );
-    showToast(`Welcome back, ${user.name}!`);
-    checkAuth();
-  } else {
+  if (!user) {
     showToast("Invalid credentials or role. Please try again.");
+    return;
   }
+
+  const email = toAuthEmail(id, role);
+  auth
+    .signInWithEmailAndPassword(email, pass)
+    .then(() => {
+      if (role === "vendor") {
+        // register vendor in separate storage so vendor portal recognizes them
+        const vendAccounts =
+          JSON.parse(localStorage.getItem("cffms_vendor_accounts")) || [];
+        if (!vendAccounts.some((v) => v.id === id)) {
+          vendAccounts.push({ id, password: pass, name: user.name });
+          localStorage.setItem(
+            "cffms_vendor_accounts",
+            JSON.stringify(vendAccounts),
+          );
+        }
+        // sign vendor in and redirect to vendor dashboard page
+        sessionStorage.setItem(
+          "cffms_vendor",
+          JSON.stringify({ id: user.id, name: user.name }),
+        );
+        localStorage.setItem(
+          "cffms_user",
+          JSON.stringify({
+            name: user.name,
+            id: user.id,
+            role: user.role,
+          }),
+        );
+        localStorage.setItem("role", "vendor");
+        window.location.replace("vendor-dashboard.html");
+        return;
+      }
+
+      localStorage.setItem(
+        "cffms_user",
+        JSON.stringify({
+          name: user.name,
+          id: user.id,
+          role: user.role,
+        }),
+      );
+      showToast(`Welcome back, ${user.name}!`);
+      checkAuth();
+    })
+    .catch(() => {
+      showToast("Login failed. Please check your credentials.");
+    });
 }
 
 function handleSignup(e) {
@@ -119,6 +170,11 @@ function handleSignup(e) {
   const id = document.getElementById("signup-id").value;
   const password = document.getElementById("signup-password").value;
 
+  if (!auth) {
+    showToast("Firebase Auth is not configured.");
+    return;
+  }
+
   const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || [];
 
   // Check if user already exists
@@ -127,26 +183,52 @@ function handleSignup(e) {
     return;
   }
 
+  const email = toAuthEmail(id, role);
+
   const newUser = { name, role, id, password };
-  accounts.push(newUser);
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  auth
+    .createUserWithEmailAndPassword(email, password)
+    .then(() => {
+      accounts.push(newUser);
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 
-  // also register vendor creds for vendor portal if role is vendor
-  if (role === "vendor") {
-    const vendAccounts =
-      JSON.parse(localStorage.getItem("cffms_vendor_accounts")) || [];
-    vendAccounts.push({ id, password, name });
-    localStorage.setItem("cffms_vendor_accounts", JSON.stringify(vendAccounts));
-  }
+      // also register vendor creds for vendor portal if role is vendor
+      if (role === "vendor") {
+        const vendAccounts =
+          JSON.parse(localStorage.getItem("cffms_vendor_accounts")) || [];
+        vendAccounts.push({ id, password, name });
+        localStorage.setItem(
+          "cffms_vendor_accounts",
+          JSON.stringify(vendAccounts),
+        );
+      }
 
-  showToast("Account created successfully! Please login.");
-  showView("login-view");
+      auth.signOut().finally(() => {
+        showToast("Account created successfully! Please login.");
+        showView("login-view");
 
-  // Reset form
-  e.target.reset();
+        // Reset form
+        e.target.reset();
+      });
+    })
+    .catch((err) => {
+      if (err && err.code === "auth/email-already-in-use") {
+        showToast("This account already exists. Please login.");
+      } else {
+        showToast("Signup failed. Please try again.");
+      }
+    });
 }
 
 function logout() {
+  if (auth) {
+    auth.signOut().catch(() => {});
+  }
+  const user = JSON.parse(localStorage.getItem("cffms_user"));
+  if (user && user.role === "vendor") {
+    sessionStorage.removeItem("cffms_vendor");
+    localStorage.removeItem("role");
+  }
   localStorage.removeItem("cffms_user");
   window.location.reload();
 }
@@ -167,6 +249,9 @@ function resetSystem() {
 
 // called at startup to watch for menu changes in another tab (e.g. vendor updates)
 function initStorageListener() {
+  // Legacy fallback for non-Firebase mode.
+  if (db && db.collection) return;
+
   window.addEventListener("storage", (e) => {
     if (e.key === STORAGE_KEY) {
       // reload menu items if storage key changed
@@ -177,6 +262,15 @@ function initStorageListener() {
 
 // Load Menu from LocalStorage
 function loadMenu() {
+  if (db && db.collection) {
+    setupStudentMenuRealtime();
+    return;
+  }
+
+  loadMenuFromLocalStorage();
+}
+
+function loadMenuFromLocalStorage() {
   const storedMenu = localStorage.getItem(STORAGE_KEY);
   const grid = document.getElementById("menu-grid");
 
@@ -186,9 +280,13 @@ function loadMenu() {
     // Handle both flat array and categorized object structure
     if (Array.isArray(rawData)) {
       menuItems = rawData;
+      menuItemsByCategory = {
+        all: rawData,
+      };
     } else {
       // Flatten categorized object for internal logic, keep categories for UI
       menuItems = Object.values(rawData).flat();
+      menuItemsByCategory = rawData;
       renderCategories(rawData);
     }
     applyFilters();
@@ -204,6 +302,42 @@ function loadMenu() {
             </div>
         `;
   }
+}
+
+function normalizeCategoryKey(value) {
+  return (value || "menu")
+    .toString()
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .replace(/^./, (ch) => ch.toLowerCase());
+}
+
+function buildMenuCategories(items) {
+  return items.reduce((acc, item) => {
+    const key = normalizeCategoryKey(item.category || item.type || "menu");
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+}
+
+function setupStudentMenuRealtime() {
+  if (!db || !db.collection || menuUnsubscribe) return;
+
+  menuUnsubscribe = db.collection("menu").onSnapshot(
+    (snapshot) => {
+      menuItems = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      menuItemsByCategory = buildMenuCategories(menuItems);
+      renderCategories(menuItemsByCategory);
+      applyFilters();
+    },
+    (err) => {
+      console.error("Menu realtime listener failed, using fallback:", err);
+      menuUnsubscribe = null;
+      loadMenuFromLocalStorage();
+    },
+  );
 }
 
 function seedDemoMenu() {
@@ -409,17 +543,13 @@ function filterType(type) {
 }
 
 function applyFilters() {
-  const storedMenu = localStorage.getItem(STORAGE_KEY);
-  if (!storedMenu) return;
-
-  const rawData = JSON.parse(storedMenu);
   let items = [];
 
   // 1. Category Filter
   if (currentCategory === "all") {
-    items = Array.isArray(rawData) ? rawData : Object.values(rawData).flat();
+    items = menuItems.slice();
   } else {
-    items = rawData[currentCategory] || [];
+    items = (menuItemsByCategory[currentCategory] || []).slice();
   }
 
   // 2. Search Filter
@@ -715,37 +845,44 @@ async function processRazorPay() {
 }
 
 function handlePaymentSuccess(total) {
+  return createAndTrackOrder(total, "UPI");
+}
+
+function createAndTrackOrder(total, paymentMode) {
+  if (!auth || !auth.currentUser) {
+    showToast("Please sign in to place an order.");
+    return Promise.reject(new Error("Authenticated Firebase user required"));
+  }
+
   const user = JSON.parse(localStorage.getItem("cffms_user")) || {
     name: "Guest",
   };
 
-  const token = Math.floor(100 + Math.random() * 900);
-
   const order = {
-    id: "ORD" + Date.now(),
-    token,
     name: user.name,
     items: cart.map((i) => ({ ...i })),
     total,
-    status: "pending",
-    time: new Date().toLocaleTimeString(),
-    payment: "UPI",
+    payment: paymentMode,
+    userId: auth.currentUser.uid,
   };
 
-  const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
-  orders.push(order);
-  localStorage.setItem("cffms_orders", JSON.stringify(orders));
+  return saveOrderToStorage(order)
+    .then((savedOrder) => {
+      sessionStorage.setItem("lastOrderId", savedOrder.id);
 
-  sessionStorage.setItem("lastOrderId", order.id);
+      cart = [];
+      updateCartUI();
 
-  cart = [];
-  updateCartUI();
+      hydrateTokenView(savedOrder);
+      updateTrackingExperience(savedOrder);
 
-  hydrateTokenView(order);
-  updateTrackingExperience(order);
-
-  showView("token-view");
-  startOrderTracking();
+      showView("token-view");
+      startOrderTracking(savedOrder.id);
+    })
+    .catch((err) => {
+      console.error("Order creation failed:", err);
+      showToast("Could not place order. Please try again.");
+    });
 }
 
 function confirmOrder() {
@@ -764,59 +901,39 @@ function confirmOrder() {
 }
 
 function generateToken() {
-  const token = Math.floor(100 + Math.random() * 900); // 100-999
-  document.getElementById("token-number").innerText = `#${token}`;
-
-  const tokenItems = document.getElementById("token-items");
-  tokenItems.innerHTML = cart
-    .map(
-      (item) => `
-        <div class="mini-item">
-            <span>${item.name} (x${item.qty})</span>
-        </div>
-    `,
-    )
-    .join("");
-
-  // persist new order
-  const user = JSON.parse(localStorage.getItem("cffms_user")) || {
-    name: "Guest",
-  };
-  const order = {
-    id: "ORD" + Date.now(),
-    token,
-    name: user.name,
-    items: cart.map((i) => ({ ...i })),
-    total: cart.reduce((s, i) => s + i.price * i.qty, 0),
-    status: "pending",
-    time: new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    payment:
-      document.querySelector('input[name="payment"]:checked').value === "online"
-        ? "UPI"
-        : "Cash",
-  };
-  saveOrderToStorage(order);
-  sessionStorage.setItem("lastOrderId", order.id); // Track this order
-
-  hydrateTokenView(order);
-  updateTrackingExperience(order);
-
-  cart = []; // Clear cart
-  updateCartUI();
-  showView("token-view");
-
-  // Start Real Status Tracking
-  startOrderTracking();
+  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  createAndTrackOrder(total, "Cash");
 }
 
-// helper to add order to shared storage
+// helper to add order to Firebase (real-time vendor updates) - no localStorage
 function saveOrderToStorage(order) {
-  const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
-  orders.push(order);
-  localStorage.setItem("cffms_orders", JSON.stringify(orders));
+  if (!db || !db.collection) {
+    return Promise.reject(new Error("Firestore is not configured"));
+  }
+
+  const token = Math.floor(1000 + Math.random() * 9000); // 4-digit token
+  return db
+    .collection("orders")
+    .add({
+      items: order.items,
+      total: order.total,
+      status: "pending", // Initial status - will flow: pending → preparing → ready → completed
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      student: order.name,
+      userId: order.userId,
+      token,
+      payment: order.payment,
+    })
+    .then((docRef) => ({
+      ...order,
+      id: docRef.id,
+      token,
+      status: "pending",
+      time: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
 }
 
 function hydrateTokenView(order) {
@@ -898,6 +1015,97 @@ function startOrderTracking(forOrderId) {
     trackingStorageHandler = null;
   }
 
+  if (orderTrackingUnsubscribe) {
+    orderTrackingUnsubscribe();
+    orderTrackingUnsubscribe = null;
+  }
+
+  const updateTrackingUI = (order) => {
+    if (!order) return;
+
+    hydrateTokenView(order);
+    updateTrackingExperience(order);
+
+    const stepConfig = {
+      pending: { steps: ["step-waiting"], width: "0%", color: "#f97316" },
+      preparing: {
+        steps: ["step-waiting", "step-preparing"],
+        width: "50%",
+        color: "#3b82f6",
+      },
+      ready: {
+        steps: ["step-waiting", "step-preparing", "step-ready"],
+        width: "100%",
+        color: "#22c55e",
+      },
+      completed: {
+        steps: ["step-waiting", "step-preparing", "step-ready"],
+        width: "100%",
+        color: "#22c55e",
+      },
+    };
+
+    const config = stepConfig[order.status] || stepConfig.pending;
+
+    // Update Dots and Labels
+    document
+      .querySelectorAll(".status-step")
+      .forEach((s) => s.classList.remove("active"));
+    config.steps.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add("active");
+    });
+
+    // Update Progress Line
+    const pLine = document.getElementById("progress-line");
+    if (pLine) {
+      pLine.style.width = config.width;
+      pLine.style.background = config.color;
+      pLine.style.boxShadow = `0 0 15px ${config.color}`;
+    }
+
+    if (order.status === "ready") {
+      // Show Toast
+      showToast("Your order is READY at the counter! 🍱 ✅");
+
+      // Celebration Animation (Burst)
+      const confetti = document.getElementById("confetti-container");
+      if (confetti && !confetti.classList.contains("active")) {
+        confetti.classList.add("active");
+        setTimeout(() => confetti.classList.remove("active"), 3000);
+      }
+
+      // Play chime only once per order ready
+      const chimeFlagKey = "chime_played_" + orderId;
+      if (!sessionStorage.getItem(chimeFlagKey)) {
+        playReadyChime();
+        sessionStorage.setItem(chimeFlagKey, "1");
+      }
+    }
+  };
+
+  if (db && db.collection) {
+    orderTrackingUnsubscribe = db
+      .collection("orders")
+      .doc(orderId)
+      .onSnapshot((doc) => {
+        if (activeTrackedOrderId !== orderId || !doc.exists) return;
+        const data = doc.data();
+        const order = {
+          id: doc.id,
+          ...data,
+          time: data.createdAt
+            ? data.createdAt.toDate().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
+        };
+        updateTrackingUI(order);
+      });
+    return;
+  }
+
   const checkStatus = () => {
     // Ignore stale callbacks from previously tracked orders.
     if (activeTrackedOrderId !== orderId) return;
@@ -905,67 +1113,7 @@ function startOrderTracking(forOrderId) {
     const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
     const order = orders.find((o) => o.id === orderId);
 
-    if (order) {
-      hydrateTokenView(order);
-      updateTrackingExperience(order);
-
-      const stepConfig = {
-        pending: { steps: ["step-waiting"], width: "0%", color: "#f97316" },
-        preparing: {
-          steps: ["step-waiting", "step-preparing"],
-          width: "50%",
-          color: "#3b82f6",
-        },
-        ready: {
-          steps: ["step-waiting", "step-preparing", "step-ready"],
-          width: "100%",
-          color: "#22c55e",
-        },
-        completed: {
-          steps: ["step-waiting", "step-preparing", "step-ready"],
-          width: "100%",
-          color: "#22c55e",
-        },
-      };
-
-      const config = stepConfig[order.status] || stepConfig.pending;
-
-      // Update Dots and Labels
-      document
-        .querySelectorAll(".status-step")
-        .forEach((s) => s.classList.remove("active"));
-      config.steps.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add("active");
-      });
-
-      // Update Progress Line
-      const pLine = document.getElementById("progress-line");
-      if (pLine) {
-        pLine.style.width = config.width;
-        pLine.style.background = config.color;
-        pLine.style.boxShadow = `0 0 15px ${config.color}`;
-      }
-
-      if (order.status === "ready") {
-        // Show Toast
-        showToast("Your order is READY at the counter! 🍱 ✅");
-
-        // Celebration Animation (Burst)
-        const confetti = document.getElementById("confetti-container");
-        if (confetti && !confetti.classList.contains("active")) {
-          confetti.classList.add("active");
-          setTimeout(() => confetti.classList.remove("active"), 3000);
-        }
-
-        // Play chime only once per order ready
-        const chimeFlagKey = "chime_played_" + orderId;
-        if (!sessionStorage.getItem(chimeFlagKey)) {
-          playReadyChime();
-          sessionStorage.setItem(chimeFlagKey, "1");
-        }
-      }
-    }
+    if (order) updateTrackingUI(order);
   };
 
   checkStatus();
@@ -1122,6 +1270,21 @@ function initCustomSelect() {
   const optionsContainer = customSelect.querySelector(".custom-options");
   const options = customSelect.querySelectorAll(".custom-option");
   const hiddenInput = document.getElementById("login-role");
+  const allowedRoles = ["student", "teacher", "staff", "vendor"];
+
+  function selectRole(value) {
+    const option = Array.from(options).find(
+      (opt) => opt.getAttribute("data-value") === value,
+    );
+    if (!option) return;
+
+    const text = option.innerText;
+    triggerText.innerText = text;
+    options.forEach((opt) => opt.classList.remove("selected"));
+    option.classList.add("selected");
+    hiddenInput.value = value;
+    hiddenInput.dispatchEvent(new Event("change"));
+  }
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1132,23 +1295,21 @@ function initCustomSelect() {
     option.addEventListener("click", (e) => {
       e.stopPropagation();
       const value = option.getAttribute("data-value");
-      const text = option.innerText;
-
-      // Update UI
-      triggerText.innerText = text;
-      options.forEach((opt) => opt.classList.remove("selected"));
-      option.classList.add("selected");
-
-      // Update hidden input
-      hiddenInput.value = value;
+      selectRole(value);
 
       // Close dropdown
       customSelect.classList.remove("open");
-
-      // Trigger change for logo sync if needed
-      hiddenInput.dispatchEvent(new Event("change"));
     });
   });
+
+  const roleParam = (
+    new URLSearchParams(window.location.search).get("role") || ""
+  )
+    .trim()
+    .toLowerCase();
+  if (allowedRoles.includes(roleParam)) {
+    selectRole(roleParam);
+  }
 
   document.addEventListener("click", () => {
     customSelect.classList.remove("open");
@@ -1193,18 +1354,8 @@ function showTrackingStatus() {
     return;
   }
 
-  const orders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
-  const order = orders.find((o) => o.id === orderId);
-  if (!order) {
-    showToast("Active order not found.");
-    return;
-  }
-
-  hydrateTokenView(order);
-  updateTrackingExperience(order);
-
   showView("token-view");
-  startOrderTracking();
+  startOrderTracking(orderId);
 }
 
 function goBackFromTracking() {
@@ -1213,71 +1364,117 @@ function goBackFromTracking() {
 
 function renderOrderHistory() {
   var user = JSON.parse(localStorage.getItem("cffms_user"));
-  var allOrders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
   var hiddenOrders =
     JSON.parse(localStorage.getItem("cffms_hidden_orders")) || [];
   var container = document.getElementById("history-list");
   if (!container) return;
 
-  var myOrders = user
-    ? allOrders
-        .filter(function (o) {
-          return o.name === user.name && !hiddenOrders.includes(o.id);
-        })
-        .reverse()
-    : [];
-
-  if (myOrders.length === 0) {
+  if (!user) {
     container.innerHTML =
       '<div class="history-empty"><div class="empty-icon">📋</div><p>No orders yet. Place your first order!</p><button class="primary-btn" onclick="showView(\'menu-view\')" style="margin-top:1rem">Browse Menu</button></div>';
     return;
   }
-  var labels = {
-    pending: "Pending",
-    preparing: "🔵 Preparing",
-    ready: "✅ Ready",
-    completed: "✅ Done",
+
+  const renderCards = (allOrders) => {
+    var myOrders = allOrders
+      .filter(function (o) {
+        return o.name === user.name && !hiddenOrders.includes(o.id);
+      })
+      .reverse();
+
+    if (myOrders.length === 0) {
+      container.innerHTML =
+        '<div class="history-empty"><div class="empty-icon">📋</div><p>No orders yet. Place your first order!</p><button class="primary-btn" onclick="showView(\'menu-view\')" style="margin-top:1rem">Browse Menu</button></div>';
+      return;
+    }
+    var labels = {
+      pending: "Pending",
+      preparing: "🔵 Preparing",
+      ready: "✅ Ready",
+      completed: "✅ Done",
+    };
+    container.innerHTML = myOrders
+      .map(function (o) {
+        var items = o.items
+          .map(function (i) {
+            return i.name + " x" + (i.qty || 1);
+          })
+          .join(", ");
+        var lbl = labels[o.status] || "Pending";
+        return (
+          '<div class="history-card" id="hist-' +
+          o.id +
+          '">' +
+          '<div class="history-card-header"><span class="history-token">#' +
+          o.token +
+          "</span>" +
+          '<div style="display:flex; align-items:center">' +
+          '<div style="text-align:right"><span class="status-badge ' +
+          (o.status || "pending") +
+          '">' +
+          lbl +
+          "</span>" +
+          '<div class="history-time">' +
+          (o.time || "") +
+          "</div></div>" +
+          '<button class="delete-history-btn" onclick="removeFromHistory(\'' +
+          o.id +
+          '\')" title="Hide from History"><span class="icon">🗑️</span></button>' +
+          "</div></div>" +
+          '<div class="history-items">' +
+          items +
+          "</div>" +
+          '<div class="history-footer"><span class="history-total">&#8377;' +
+          o.total +
+          "</span>" +
+          '<span class="history-payment">&#128179; ' +
+          (o.payment || "Cash") +
+          "</span></div></div>"
+        );
+      })
+      .join("");
   };
-  container.innerHTML = myOrders
-    .map(function (o) {
-      var items = o.items
-        .map(function (i) {
-          return i.name + " x" + i.qty;
+
+  if (db && db.collection) {
+    if (historyUnsubscribe) {
+      historyUnsubscribe();
+      historyUnsubscribe = null;
+    }
+
+    const historyQuery =
+      auth && auth.currentUser
+        ? db.collection("orders").where("userId", "==", auth.currentUser.uid)
+        : db.collection("orders").where("student", "==", user.name);
+
+    historyUnsubscribe = historyQuery.onSnapshot((snapshot) => {
+      const firebaseOrders = snapshot.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            name: data.student,
+            time: data.createdAt
+              ? data.createdAt.toDate().toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "",
+          };
         })
-        .join(", ");
-      var lbl = labels[o.status] || "Pending";
-      return (
-        '<div class="history-card" id="hist-' +
-        o.id +
-        '">' +
-        '<div class="history-card-header"><span class="history-token">#' +
-        o.token +
-        "</span>" +
-        '<div style="display:flex; align-items:center">' +
-        '<div style="text-align:right"><span class="status-badge ' +
-        (o.status || "pending") +
-        '">' +
-        lbl +
-        "</span>" +
-        '<div class="history-time">' +
-        (o.time || "") +
-        "</div></div>" +
-        '<button class="delete-history-btn" onclick="removeFromHistory(\'' +
-        o.id +
-        '\')" title="Hide from History"><span class="icon">🗑️</span></button>' +
-        "</div></div>" +
-        '<div class="history-items">' +
-        items +
-        "</div>" +
-        '<div class="history-footer"><span class="history-total">&#8377;' +
-        o.total +
-        "</span>" +
-        '<span class="history-payment">&#128179; ' +
-        (o.payment || "Cash") +
-        "</span></div></div>"
-      );
-    })
-    .join("");
+        .sort((a, b) => {
+          const aMs = a.createdAt ? a.createdAt.toMillis() : 0;
+          const bMs = b.createdAt ? b.createdAt.toMillis() : 0;
+          return bMs - aMs;
+        });
+
+      renderCards(firebaseOrders);
+    });
+    return;
+  }
+
+  var allOrders = JSON.parse(localStorage.getItem("cffms_orders")) || [];
+  renderCards(allOrders);
 }
 
 function removeFromHistory(orderId) {

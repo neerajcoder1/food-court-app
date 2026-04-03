@@ -1,3 +1,14 @@
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "food-court-app-ae48f.firebaseapp.com",
+  projectId: "food-court-app-ae48f",
+  storageBucket: "food-court-app-ae48f.appspot.com",
+  messagingSenderId: "575018100354",
+  appId: "YOUR_APP_ID",
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 const NEW_MENU = {
   breakfast: [
     {
@@ -91,7 +102,6 @@ const NEW_MENU = {
       price: 20,
       available: true,
       type: "veg",
-
     },
   ],
   lunch: [
@@ -268,6 +278,22 @@ const NEW_MENU = {
   ],
 };
 
-localStorage.setItem("cffms_menu", JSON.stringify(NEW_MENU));
-console.log("New categorized menu seeded!");
-location.reload();
+const allItems = [];
+
+Object.keys(NEW_MENU).forEach((category) => {
+  NEW_MENU[category].forEach((item) => {
+    allItems.push({
+      ...item,
+      category,
+    });
+  });
+});
+
+async function uploadMenu() {
+  for (const item of allItems) {
+    await db.collection("menu").doc(item.id).set(item);
+  }
+  console.log("Done");
+}
+
+uploadMenu();

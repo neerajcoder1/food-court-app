@@ -7,13 +7,65 @@
 
     <!-- Auth Guard -->
     <script>
-      if (!sessionStorage.getItem("cffms_vendor")) {
-        window.location.replace("vendor-login.html");
+      if (localStorage.getItem("role") !== "vendor") {
+        window.location.href = "/vendor-login.html";
       }
+
+      (function guardVendorAccess() {
+        function safeParse(value) {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            return null;
+          }
+        }
+
+        const user = safeParse(localStorage.getItem("cffms_user"));
+        const vendorSession = safeParse(sessionStorage.getItem("cffms_vendor"));
+        const userAccounts =
+          safeParse(localStorage.getItem("cffms_accounts")) || [];
+
+        function isKnownVendor(vendorId) {
+          return userAccounts.some(
+            (account) => account.id === vendorId && account.role === "vendor",
+          );
+        }
+
+        const userIsVendor =
+          user && user.role === "vendor" && isKnownVendor(user.id);
+        const sessionIsVendor =
+          vendorSession && vendorSession.id && isKnownVendor(vendorSession.id);
+
+        if (!userIsVendor && !sessionIsVendor) {
+          sessionStorage.removeItem("cffms_vendor");
+          window.location.replace("vendor-login.html");
+          return;
+        }
+
+        const vendorIdentity = userIsVendor
+          ? { id: user.id, name: user.name }
+          : {
+              id: vendorSession.id,
+              name: vendorSession.name || vendorSession.id,
+            };
+
+        sessionStorage.setItem("cffms_vendor", JSON.stringify(vendorIdentity));
+        localStorage.setItem(
+          "cffms_user",
+          JSON.stringify({
+            id: vendorIdentity.id,
+            name: vendorIdentity.name,
+            role: "vendor",
+          }),
+        );
+        localStorage.setItem("role", "vendor");
+      })();
 
       function logoutVendor(e) {
         if (e) e.preventDefault();
         sessionStorage.removeItem("cffms_vendor");
+        localStorage.removeItem("cffms_user");
+        localStorage.removeItem("role");
         window.location.replace("vendor-login.html");
       }
     </script>
@@ -1722,7 +1774,7 @@
         border-radius: 3px;
       }
     </style>
-    <link rel="icon" type="image/jpeg" href="../logo.jpeg" />
+    <link rel="icon" type="image/jpeg" href="logo.jpeg" />
   </head>
 
   <body>
@@ -1741,7 +1793,7 @@
     <aside class="sidebar">
       <div class="sidebar-logo">
         <div class="logo-mark">
-          <img src="../logo.jpeg" alt="CFFMS Logo" class="logo-img" />
+          <img src="logo.jpeg" alt="CFFMS Logo" class="logo-img" />
           <!-- <span><span class="logo-dot"></span>CafeteriaToken</span> -->
         </div>
         <div class="logo-sub">Vendor Dashboard</div>
@@ -2072,6 +2124,59 @@
             <button class="btn btn-accent" onclick="openAddModal()">
               + Add Item
             </button>
+          </div>
+
+          <div class="card" style="margin-bottom: 16px">
+            <div class="card-title">Firebase Menu CRUD</div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 10px;
+                margin-top: 12px;
+              "
+            >
+              <input
+                id="name"
+                class="form-input"
+                type="text"
+                placeholder="name"
+              />
+              <input
+                id="price"
+                class="form-input"
+                type="number"
+                placeholder="price"
+              />
+              <input
+                id="category"
+                class="form-input"
+                type="text"
+                placeholder="category"
+              />
+              <input
+                id="type"
+                class="form-input"
+                type="text"
+                placeholder="type"
+              />
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr auto auto auto;
+                gap: 10px;
+                margin-top: 10px;
+                align-items: center;
+              "
+            >
+              <select id="vendor-item-select" class="form-select">
+                <option value="">Select item for Edit/Delete</option>
+              </select>
+              <button class="btn btn-accent" onclick="addItem()">Add</button>
+              <button class="btn" onclick="handleVendorEdit()">Edit</button>
+              <button class="btn" onclick="handleVendorDelete()">Delete</button>
+            </div>
           </div>
 
           <div class="menu-layout">
@@ -2510,8 +2615,30 @@
 
     <div id="toast">✓ <span id="toast-msg">Done</span></div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
+      // ── FIREBASE (vendor menu realtime CRUD) ──
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "food-court-app-ae48f.firebaseapp.com",
+        projectId: "food-court-app-ae48f",
+        storageBucket: "food-court-app-ae48f.appspot.com",
+        messagingSenderId: "575018100354",
+        appId: "YOUR_APP_ID",
+      };
+
+      let db = null;
+      if (typeof firebase !== "undefined") {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+        window.db = db;
+      }
+
       // ── DATA ──
       const STORAGE_KEY = "cffms_menu";
 
@@ -2805,50 +2932,12 @@
         ],
       };
 
-      const ORDERS_KEY = "cffms_orders";
       let tokenCounter = 100;
       let orders = [];
       let qFilter = "all";
       let reportTab = "today";
 
-      // helper to load/save orders
-      function loadOrdersFromStorage() {
-        const stored = localStorage.getItem(ORDERS_KEY);
-        if (stored) {
-          try {
-            orders = JSON.parse(stored);
-          } catch (e) {
-            console.error("invalid orders", e);
-          }
-        }
-      }
-      function saveOrdersToStorage() {
-        localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-      }
-
-      // DEVELOPER UTILITY: Clears all system data
-      window.resetSystem = function () {
-        if (
-          confirm(
-            "Are you sure? This will remove ALL orders and user data from the system!",
-          )
-        ) {
-          localStorage.clear();
-          sessionStorage.clear();
-          alert("System Reset Successfully! Reloading...");
-          window.location.reload();
-        }
-      };
-
-      // listen for updates from other tabs (e.g. student submitting order)
-      window.addEventListener("storage", (e) => {
-        if (e.key === ORDERS_KEY) {
-          loadOrdersFromStorage();
-          renderQueue();
-          renderKOT();
-          renderBilling();
-        }
-      });
+      // Firebase realtime listener handles all order updates (see setupVendorOrdersRealtime)
 
       // Demo orders (DISABLED for full fresh start)
       function seedOrders() {
@@ -2893,13 +2982,14 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         loadVendorMenu();
-        loadOrdersFromStorage();
+        // Orders now load from Firebase realtime listener (setupVendorOrdersRealtime)
 
         // seedOrders(); // DISABLED
         renderMenu();
-        renderQueue();
         renderDoorQrPage();
         initTheme();
+        setupVendorMenuRealtime();
+        setupVendorOrdersRealtime();
       });
 
       // ── THEME ──
@@ -3434,6 +3524,7 @@
 
       // ── MENU ──
       let activeMenuCategory = "breakfast";
+      let vendorRealtimeMenuItems = [];
       const menuCatLabels = {
         breakfast: "🥞 Breakfast",
         morningSnacks: "🥟 Morning Snacks",
@@ -3443,6 +3534,175 @@
         dinner: "🍛 Dinner",
         beverages: "🥤 Beverages",
       };
+
+      function setupVendorMenuRealtime() {
+        if (typeof db === "undefined" || !db.collection) {
+          return;
+        }
+
+        db.collection("menu").onSnapshot((snapshot) => {
+          const items = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+
+          renderVendorMenu(items);
+        });
+      }
+
+      function setupVendorOrdersRealtime() {
+        if (typeof db === "undefined" || !db.collection) {
+          return;
+        }
+
+        db.collection("orders")
+          .orderBy("createdAt", "desc")
+          .onSnapshot((snapshot) => {
+            const firebaseOrders = snapshot.docs.map((doc) => {
+              const data = doc.data();
+              const createdAt = data.createdAt
+                ? data.createdAt.toDate()
+                : new Date();
+              return {
+                id: doc.id,
+                ...data,
+                status: data.status || "pending",
+                time: createdAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                name: data.student || "Guest",
+                token: data.token || "N/A",
+                payment: data.payment || "Unpaid",
+                isPaid: data.isPaid || false,
+              };
+            });
+
+            orders = firebaseOrders;
+            renderQueue();
+            renderKOT();
+            renderBilling();
+          });
+      }
+
+      // Status updates via updateOrder() function which calls Firebase directly
+
+      function renderVendorMenu(items) {
+        vendorRealtimeMenuItems = Array.isArray(items) ? items : [];
+
+        const grouped = {
+          breakfast: [],
+          morningSnacks: [],
+          lunch: [],
+          snacksSides: [],
+          eveningSnacks: [],
+          dinner: [],
+          beverages: [],
+        };
+
+        vendorRealtimeMenuItems.forEach((item) => {
+          const category = item.category || "breakfast";
+          if (!grouped[category]) grouped[category] = [];
+          grouped[category].push({
+            id: item.id,
+            name: item.name || "Unnamed",
+            price: Number(item.price) || 0,
+            category,
+            type: item.type || "veg",
+            available: item.available !== false,
+            emoji: item.emoji || "🍽",
+            imageSrc: item.imageSrc || "",
+            desc: item.desc || "",
+          });
+        });
+
+        menuItems = grouped;
+        updateVendorItemSelect(vendorRealtimeMenuItems);
+        renderMenu();
+      }
+
+      function updateVendorItemSelect(items) {
+        const select = document.getElementById("vendor-item-select");
+        if (!select) return;
+
+        const options = (Array.isArray(items) ? items : [])
+          .map(
+            (item) =>
+              `<option value="${item.id}">${item.name || item.id} - ₹${Number(item.price) || 0}</option>`,
+          )
+          .join("");
+
+        select.innerHTML = `<option value="">Select item for Edit/Delete</option>${options}`;
+      }
+
+      async function addItem() {
+        if (typeof db === "undefined" || !db.collection) {
+          showToast("Firestore is not configured on vendor dashboard");
+          return;
+        }
+
+        await db.collection("menu").add({
+          name: document.getElementById("name").value,
+          price: Number(document.getElementById("price").value),
+          category: document.getElementById("category").value,
+          type: document.getElementById("type").value,
+          available: true,
+        });
+
+        showToast("Menu item added");
+      }
+
+      async function updateItem(id) {
+        if (!id) {
+          showToast("Select an item to edit");
+          return;
+        }
+
+        if (typeof db === "undefined" || !db.collection) {
+          showToast("Firestore is not configured on vendor dashboard");
+          return;
+        }
+
+        await db.collection("menu").doc(id).update({
+          price: 100,
+        });
+
+        showToast("Menu item updated");
+      }
+
+      async function deleteItem(id) {
+        if (!id) {
+          showToast("Select an item to delete");
+          return;
+        }
+
+        if (typeof db === "undefined" || !db.collection) {
+          showToast("Firestore is not configured on vendor dashboard");
+          return;
+        }
+
+        await db.collection("menu").doc(id).delete();
+
+        showToast("Menu item deleted");
+      }
+
+      function handleVendorEdit() {
+        const select = document.getElementById("vendor-item-select");
+        const id = select ? select.value : "";
+        updateItem(id).catch((err) => {
+          console.error(err);
+          showToast("Unable to update item");
+        });
+      }
+
+      function handleVendorDelete() {
+        const select = document.getElementById("vendor-item-select");
+        const id = select ? select.value : "";
+        deleteItem(id).catch((err) => {
+          console.error(err);
+          showToast("Unable to delete item");
+        });
+      }
 
       function renderMenu() {
         const sidebar = document.getElementById("menu-sidebar");
@@ -3946,7 +4206,19 @@
         o.status = status;
 
         renderQueue();
-        saveOrdersToStorage(); // PERSIST STATUS UPDATE
+        // Status flow: pending → preparing → ready → completed
+        // Firebase update automatically triggers renderQueue via setupVendorOrdersRealtime listener
+        if (typeof db !== "undefined" && db.collection) {
+          db.collection("orders")
+            .doc(id)
+            .update({
+              status: status,
+            })
+            .catch((err) =>
+              console.error("Firebase order update failed:", err),
+            );
+        }
+
         const msgs = {
           preparing: "Now preparing",
           ready: "Ready for pickup!",

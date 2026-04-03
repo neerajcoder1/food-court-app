@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Vendor accounts are created as vendor.<id>@cffms.local in app/login flows.
+    function isVendor() {
+      return signedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('^vendor\\..+@cffms\\.local$');
+    }
+
+    function isOrderOwner() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function validStatus(value) {
+      return value in ["pending", "preparing", "ready", "completed"];
+    }
+
+    function validVendorTransition() {
+      return (resource.data.status == "pending" && request.resource.data.status in ["pending", "preparing"])
+        || (resource.data.status == "preparing" && request.resource.data.status in ["preparing", "ready"])
+        || (resource.data.status == "ready" && request.resource.data.status in ["ready", "completed"])
+        || (resource.data.status == "completed" && request.resource.data.status == "completed");
+    }
+
+    // ── MENU COLLECTION ──
+    // Public read, vendor-only write.
+    match /menu/{document=**} {
+      allow read: if true;
+      allow write: if isVendor();
+    }
+
+    // ── ORDERS COLLECTION ──
+    // Students can create/read only their own orders.
+    // Vendors can read all orders and update only status.
+    match /orders/{orderId} {
+      allow read: if isVendor() || isOrderOwner();
+
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.student is string
+                    && request.resource.data.items is list
+                    && request.resource.data.total is number
+                    && request.resource.data.payment is string
+                    && request.resource.data.token is number
+                    && request.resource.data.createdAt != null
+                    && request.resource.data.status == "pending";
+
+      allow update: if isVendor()
+                    && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status"])
+                    && validStatus(request.resource.data.status)
+                    && validVendorTransition();
+
+      allow delete: if false;
+    }
+
+    // Deny all other operations
+    match /{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}
