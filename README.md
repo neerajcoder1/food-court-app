@@ -158,11 +158,11 @@ This module integrates the **Razorpay Payment Gateway** to enable secure online 
 
 Successful transactions are stored in a local database file (`database.json`) containing:
 
-- Razorpay Payment ID
-- Razorpay Order ID
-- Payment amount
+- Token number
+- Payment method (UPI/Cash)
+- UPI reference (when provided)
 - User ID
-- Timestamp of transaction
+- Timestamp of order
 
 ### 🎟 Token Generation
 
@@ -174,20 +174,13 @@ After successful payment verification:
 
 ---
 
-## ⚙ Backend Architecture
+## ⚙ Architecture
 
-The payment system is implemented using **Node.js and Express**.
+The app now runs as a static frontend on Vercel with Firebase services:
 
-### API Endpoints
-
-**GET /api/get-key**  
-Returns the Razorpay public key to the frontend.
-
-**POST /api/create-order**  
-Creates a new Razorpay order from the backend.
-
-**POST /api/verify-payment**  
-Verifies the Razorpay payment signature after successful payment.
+- Firebase Authentication (role-based sign-in)
+- Firestore (menu + orders + runtime controls)
+- Vendor UPI QR flow for payment confirmation
 
 ---
 
@@ -195,34 +188,27 @@ Verifies the Razorpay payment signature after successful payment.
 
 Student Checkout  
 ↓  
-Frontend requests order creation  
+Student scans vendor UPI QR  
 ↓  
-Backend creates Razorpay order  
+Student enters UPI reference + confirms  
 ↓  
-Razorpay Checkout popup opens  
+Order saved to Firestore  
 ↓  
-User completes payment  
+Sequential token generated (0..n)  
 ↓  
-Backend verifies payment signature  
-↓  
-Transaction stored  
-↓  
-Order token generated
+Vendor receives order in realtime dashboard
 
 ---
 
 ## 🧪 Testing Payments
 
-During development Razorpay **Test Mode** is used.
+Use the vendor UPI QR test flow:
 
-Test card details:
-
-Card Number: 4111 1111 1111 1111  
-Expiry: Any future date  
-CVV: 123  
-OTP: 123456
-
-No real money is processed.
+1. Open checkout
+2. Select Pay by Vendor QR
+3. Scan QR in UPI app
+4. Enter UPI transaction reference
+5. Confirm payment
 
 ---
 
