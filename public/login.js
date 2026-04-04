@@ -43,6 +43,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function vendorAuthEmail(vendorId) {
     return `vendor.${(vendorId || "").toString().trim().toLowerCase()}@cffms.local`;
   }
+
+  function isVendorEmail(email) {
+    return /^vendor\..+@cffms\.local$/i.test((email || "").toString());
+  }
   function seedDefault() {
     const accs = getAccounts();
     if (accs.length === 0) {
@@ -81,7 +85,13 @@ document.addEventListener("DOMContentLoaded", () => {
       (activeVendor && activeVendor.id) ||
       null;
 
-    if (auth.currentUser) {
+    const expectedEmail = vendorAuthEmail(sessionVendorId);
+    const currentEmail = (auth.currentUser && auth.currentUser.email) || "";
+
+    if (
+      currentEmail &&
+      currentEmail.toLowerCase() === expectedEmail.toLowerCase()
+    ) {
       window.location.replace("vendor-dashboard.html");
       return;
     }
@@ -101,6 +111,10 @@ document.addEventListener("DOMContentLoaded", () => {
           localStorage.removeItem("cffms_user");
           localStorage.removeItem("role");
         });
+    } else if (currentEmail && !isVendorEmail(currentEmail)) {
+      sessionStorage.removeItem("cffms_vendor");
+      localStorage.removeItem("cffms_user");
+      localStorage.removeItem("role");
     }
   }
 

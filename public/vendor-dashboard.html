@@ -2644,6 +2644,10 @@
         return `vendor.${(vendorId || "").toString().trim().toLowerCase()}@cffms.local`;
       }
 
+      function isVendorEmail(email) {
+        return /^vendor\..+@cffms\.local$/i.test((email || "").toString());
+      }
+
       function getVendorCredentialsForAutoLogin() {
         const vendorSession = JSON.parse(
           sessionStorage.getItem("cffms_vendor") || "null",
@@ -3027,6 +3031,24 @@
           if (realtimeInitialized) return;
 
           if (!user) {
+            const creds = getVendorCredentialsForAutoLogin();
+            if (!creds || !creds.password) {
+              window.location.replace("vendor-login.html");
+              return;
+            }
+
+            auth
+              .signInWithEmailAndPassword(
+                vendorAuthEmail(creds.id),
+                creds.password,
+              )
+              .catch(() => {
+                window.location.replace("vendor-login.html");
+              });
+            return;
+          }
+
+          if (!isVendorEmail(user.email)) {
             const creds = getVendorCredentialsForAutoLogin();
             if (!creds || !creds.password) {
               window.location.replace("vendor-login.html");
