@@ -3635,41 +3635,61 @@
           return;
         }
 
-        db.collection("orders")
-          .orderBy("createdAt", "desc")
-          .onSnapshot(
+        function attachOrdersListener(useOrderedQuery) {
+          const queryRef = useOrderedQuery
+            ? db.collection("orders").orderBy("createdAt", "desc")
+            : db.collection("orders");
+
+          queryRef.onSnapshot(
             (snapshot) => {
-              const firebaseOrders = snapshot.docs.map((doc) => {
-                const data = doc.data();
-                const createdAt = data.createdAt
-                  ? data.createdAt.toDate()
-                  : new Date();
-                return {
-                  id: doc.id,
-                  ...data,
-                  status: data.status || "pending",
-                  time: createdAt.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                  name: data.student || "Guest",
-                  token: data.token || "N/A",
-                  payment: data.payment || "Unpaid",
-                  isPaid: data.isPaid || false,
-                };
-              });
+              const firebaseOrders = snapshot.docs
+                .map((doc) => {
+                  const data = doc.data();
+                  const createdAt = data.createdAt
+                    ? data.createdAt.toDate()
+                    : new Date(0);
+                  return {
+                    id: doc.id,
+                    ...data,
+                    _createdAt: createdAt,
+                    status: data.status || "pending",
+                    time: createdAt.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                    name: data.student || "Guest",
+                    token: data.token || "N/A",
+                    payment: data.payment || "Unpaid",
+                    isPaid: data.isPaid || false,
+                  };
+                })
+                .sort((a, b) => b._createdAt - a._createdAt)
+                .map(({ _createdAt, ...rest }) => rest);
 
               orders = firebaseOrders;
               renderQueue();
               renderKOT();
               renderBilling();
             },
-            () => {
+            (error) => {
+              if (useOrderedQuery) {
+                console.warn(
+                  "Orders ordered query failed, retrying fallback query:",
+                  error && error.code ? error.code : error,
+                );
+                attachOrdersListener(false);
+                return;
+              }
+
               console.warn(
                 "Orders listener failed. Waiting for next auth/session state.",
+                error && error.code ? error.code : error,
               );
             },
           );
+        }
+
+        attachOrdersListener(true);
       }
 
       // Status updates via updateOrder() function which calls Firebase directly

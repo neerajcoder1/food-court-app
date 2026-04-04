@@ -8,8 +8,11 @@ service cloud.firestore {
     // Vendor accounts are created as vendor.<id>@cffms.local in app/login flows.
     function isVendor() {
       return signedIn()
-        && request.auth.token.email is string
-        && request.auth.token.email.matches('^vendor\\..+@cffms\\.local$');
+        && (
+          (request.auth.token.role is string && request.auth.token.role == "vendor")
+          || (request.auth.token.email is string
+              && request.auth.token.email.matches('^vendor\\..+@cffms\\.local$'))
+        );
     }
 
     function isOrderOwner() {
