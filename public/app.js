@@ -779,10 +779,15 @@ function renderCheckoutList() {
 function openRazorModal() {
   const total = document.getElementById("checkout-total").innerText;
   document.getElementById("razor-total").innerText = total;
+  resetVendorPaymentConfirmation();
   document.getElementById("razorpay-modal").classList.add("open");
 }
 
 function closeRazorModal() {
+  if (vendorPayTimerId) {
+    clearInterval(vendorPayTimerId);
+    vendorPayTimerId = null;
+  }
   document.getElementById("razorpay-modal").classList.remove("open");
 }
 
@@ -797,9 +802,102 @@ async function processRazorPay() {
   confirmVendorQrPayment();
 }
 
+let vendorPayCountdown = 0;
+let vendorPayTimerId = null;
+
+function resetVendorPaymentConfirmation() {
+  const refInput = document.getElementById("vendor-upi-ref");
+  const paidCheck = document.getElementById("vendor-paid-check");
+  if (refInput) refInput.value = "";
+  if (paidCheck) paidCheck.checked = false;
+
+  if (vendorPayTimerId) {
+    clearInterval(vendorPayTimerId);
+    vendorPayTimerId = null;
+  }
+
+  vendorPayCountdown = 15;
+  updateVendorPayButtonState();
+
+  vendorPayTimerId = setInterval(() => {
+    vendorPayCountdown -= 1;
+    if (vendorPayCountdown <= 0) {
+      vendorPayCountdown = 0;
+      clearInterval(vendorPayTimerId);
+      vendorPayTimerId = null;
+    }
+    updateVendorPayButtonState();
+  }, 1000);
+
+  if (refInput) {
+    refInput.oninput = updateVendorPayButtonState;
+  }
+  if (paidCheck) {
+    paidCheck.onchange = updateVendorPayButtonState;
+  }
+}
+
+function updateVendorPayButtonState() {
+  const payBtn = document.getElementById("razor-pay-btn");
+  const btnText = document.getElementById("razor-btn-text");
+  const timerText = document.getElementById("vendor-pay-timer");
+  const refInput = document.getElementById("vendor-upi-ref");
+  const paidCheck = document.getElementById("vendor-paid-check");
+
+  if (!payBtn || !btnText) return;
+
+  const hasValidRef = !!(refInput && refInput.value.trim().length >= 8);
+  const hasChecked = !!(paidCheck && paidCheck.checked);
+  const waitDone = vendorPayCountdown <= 0;
+  const canConfirm = waitDone && hasValidRef && hasChecked;
+
+  payBtn.disabled = !canConfirm;
+
+  if (!waitDone) {
+    btnText.innerText = `I HAVE PAID (${vendorPayCountdown}s)`;
+    if (timerText) {
+      timerText.innerText = `Please wait ${vendorPayCountdown}s before confirming payment.`;
+    }
+    return;
+  }
+
+  btnText.innerText = "I HAVE PAID";
+
+  if (timerText) {
+    if (!hasValidRef) {
+      timerText.innerText = "Enter a valid UPI transaction ID (min 8 chars).";
+    } else if (!hasChecked) {
+      timerText.innerText =
+        "Tick the payment confirmation checkbox to continue.";
+    } else {
+      timerText.innerText =
+        "Ready to confirm. Vendor will verify your payment.";
+    }
+  }
+}
+
 function confirmVendorQrPayment() {
   const totalText = document.getElementById("razor-total").innerText || "₹0";
   const total = Number(totalText.replace(/[^0-9.]/g, "")) || 0;
+  const refInput = document.getElementById("vendor-upi-ref");
+  const paidCheck = document.getElementById("vendor-paid-check");
+  const upiRef = (refInput && refInput.value.trim()) || "";
+
+  if (vendorPayCountdown > 0) {
+    showToast("Please wait for the timer before confirming payment.");
+    return;
+  }
+
+  if (upiRef.length < 8) {
+    showToast("Enter valid UPI transaction ID.");
+    return;
+  }
+
+  if (!(paidCheck && paidCheck.checked)) {
+    showToast("Please confirm the payment checkbox.");
+    return;
+  }
+
   if (!total) {
     showToast("Invalid total amount. Please try again.");
     return;
@@ -807,14 +905,14 @@ function confirmVendorQrPayment() {
 
   closeRazorModal();
   showToast("Payment marked as completed. Vendor will verify at counter.");
-  handlePaymentSuccess(total);
+  handlePaymentSuccess(total, upiRef);
 }
 
-function handlePaymentSuccess(total) {
-  return createAndTrackOrder(total, "UPI");
+function handlePaymentSuccess(total, upiRef) {
+  return createAndTrackOrder(total, "UPI", { upiRef });
 }
 
-function createAndTrackOrder(total, paymentMode) {
+function createAndTrackOrder(total, paymentMode, paymentMeta = {}) {
   if (!auth || !auth.currentUser) {
     showToast("Please sign in to place an order.");
     return Promise.reject(new Error("Authenticated Firebase user required"));
@@ -829,6 +927,7 @@ function createAndTrackOrder(total, paymentMode) {
     items: cart.map((i) => ({ ...i })),
     total,
     payment: paymentMode,
+    upiRef: paymentMeta.upiRef || "",
     userId: auth.currentUser.uid,
   };
 
@@ -907,6 +1006,7 @@ function saveOrderToStorage(order) {
         userId: order.userId,
         token,
         payment: order.payment,
+        upiRef: order.upiRef || "",
       })
       .then((docRef) => ({
         ...order,

@@ -1551,6 +1551,52 @@ body {
   font-weight: 700;
 }
 
+.vendor-proof-wrap {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.vendor-proof-label {
+  display: block;
+  font-size: 11px;
+  color: #4b5563;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.vendor-proof-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  outline: none;
+}
+
+.vendor-proof-input:focus {
+  border-color: #fb923c;
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
+}
+
+.vendor-proof-check {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.vendor-proof-timer {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #9a3412;
+  font-weight: 700;
+}
+
 @keyframes namastePulse {
   0% {
     transform: scale(1) rotate(0deg);
@@ -1586,6 +1632,13 @@ body {
 .razor-pay-btn:hover {
   filter: brightness(1.1);
   box-shadow: 0 10px 20px rgba(51, 154, 240, 0.3);
+}
+
+.razor-pay-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
 }
 
 .razor-spinner {

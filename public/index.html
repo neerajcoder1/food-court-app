@@ -516,6 +516,26 @@
                     Vendor requests payment before order confirmation
                   </span>
                 </div>
+
+                <div class="vendor-proof-wrap">
+                  <label class="vendor-proof-label" for="vendor-upi-ref">
+                    Enter UPI Transaction ID
+                  </label>
+                  <input
+                    type="text"
+                    id="vendor-upi-ref"
+                    class="vendor-proof-input"
+                    placeholder="e.g. 413926384751"
+                    autocomplete="off"
+                  />
+                  <label class="vendor-proof-check">
+                    <input type="checkbox" id="vendor-paid-check" />
+                    I have completed payment in my UPI app
+                  </label>
+                  <div class="vendor-proof-timer" id="vendor-pay-timer">
+                    Confirm button will unlock shortly.
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -523,6 +543,7 @@
               class="razor-pay-btn"
               id="razor-pay-btn"
               onclick="confirmVendorQrPayment()"
+              disabled
             >
               <span id="razor-btn-text">I HAVE PAID</span>
               <div class="razor-spinner" id="razor-spinner"></div>
