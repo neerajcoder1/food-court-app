@@ -47,6 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   startOrderTracking(); // Check for active order tracking on load
   initCustomSelect(); // Init custom role selector
+  applyViewFromQuery();
 });
 
 // --- User Accounts Management ---
@@ -737,6 +738,22 @@ function showView(viewId) {
   target.style.animation = null;
 
   window.scrollTo(0, 0);
+}
+
+function applyViewFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  const role = params.get("role");
+
+  if (view === "signup") {
+    showView("signup-view");
+    if (role) {
+      const roleSelect = document.getElementById("signup-role");
+      if (roleSelect) {
+        roleSelect.value = role;
+      }
+    }
+  }
 }
 
 // Attach cart btn event
