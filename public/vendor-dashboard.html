@@ -2988,9 +2988,24 @@
         renderMenu();
         renderDoorQrPage();
         initTheme();
-        setupVendorMenuRealtime();
-        setupVendorOrdersRealtime();
+        initVendorRealtime();
       });
+
+      function initVendorRealtime() {
+        if (
+          typeof firebase === "undefined" ||
+          typeof firebase.auth !== "function"
+        ) {
+          setupVendorMenuRealtime();
+          setupVendorOrdersRealtime();
+          return;
+        }
+
+        firebase.auth().onAuthStateChanged(() => {
+          setupVendorMenuRealtime();
+          setupVendorOrdersRealtime();
+        });
+      }
 
       // ── THEME ──
       function initTheme() {
