@@ -49,6 +49,51 @@
           0 20px 60px rgba(0, 0, 0, 0.1);
       }
 
+      .qr-panel {
+        margin: 1rem 0 1.5rem;
+        padding: 1rem;
+        border-radius: 18px;
+        border: 1px solid rgba(251, 146, 96, 0.25);
+        background: rgba(15, 23, 42, 0.45);
+        text-align: center;
+      }
+
+      .qr-panel-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-bottom: 0.7rem;
+      }
+
+      .qr-panel img {
+        width: 160px;
+        height: 160px;
+        max-width: 100%;
+        border-radius: 16px;
+        padding: 10px;
+        background: #ffffff;
+        display: block;
+        margin: 0 auto 0.85rem;
+      }
+
+      .qr-links {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .qr-links a {
+        color: #fb9460;
+        text-decoration: none;
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+
+      .qr-links a:hover {
+        text-decoration: underline;
+      }
+
       .light-mode .login-heading,
       .light-mode .brand-name {
         color: #0f172a;
@@ -615,6 +660,18 @@
           >
             🌐 Live Dashboard
           </a>
+        </div>
+        <div class="qr-panel">
+          <div class="qr-panel-title">Vendor Login QR</div>
+          <a href="vendor-qr.png" target="_blank" rel="noopener">
+            <img src="vendor-qr.png" alt="Vendor login QR code" />
+          </a>
+          <div class="qr-links">
+            <a href="vendor-qr.png" download>Download QR</a>
+            <a href="vendor-login.html" target="_blank" rel="noopener">
+              Open Vendor Login
+            </a>
+          </div>
         </div>
         <div class="login-heading">Vendor Portal</div>
         <div class="login-subheading">
