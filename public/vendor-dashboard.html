@@ -2631,12 +2631,41 @@
       };
 
       let db = null;
+      let auth = null;
+      let realtimeInitialized = false;
       if (typeof firebase !== "undefined") {
         if (!firebase.apps.length) {
           firebase.initializeApp(firebaseConfig);
         }
         db = firebase.firestore();
+        if (typeof firebase.auth === "function") {
+          auth = firebase.auth();
+        }
         window.db = db;
+      }
+
+      function vendorAuthEmail(vendorId) {
+        return `vendor.${(vendorId || "").toString().trim().toLowerCase()}@cffms.local`;
+      }
+
+      function getVendorCredentialsForAutoLogin() {
+        const vendorSession = JSON.parse(
+          sessionStorage.getItem("cffms_vendor") || "null",
+        );
+        const vendorUser = JSON.parse(
+          localStorage.getItem("cffms_user") || "null",
+        );
+        const accounts = JSON.parse(
+          localStorage.getItem("cffms_vendor_accounts") || "[]",
+        );
+
+        const vendorId =
+          (vendorSession && vendorSession.id) ||
+          (vendorUser && vendorUser.role === "vendor" && vendorUser.id) ||
+          null;
+
+        if (!vendorId) return null;
+        return accounts.find((a) => a.id === vendorId) || null;
       }
 
       // ── DATA ──
@@ -2992,16 +3021,34 @@
       });
 
       function initVendorRealtime() {
-        if (
-          typeof firebase === "undefined" ||
-          typeof firebase.auth !== "function"
-        ) {
+        if (!auth) {
           setupVendorMenuRealtime();
           setupVendorOrdersRealtime();
           return;
         }
 
-        firebase.auth().onAuthStateChanged(() => {
+        auth.onAuthStateChanged((user) => {
+          if (realtimeInitialized) return;
+
+          if (!user) {
+            const creds = getVendorCredentialsForAutoLogin();
+            if (!creds || !creds.password) {
+              window.location.replace("vendor-login.html");
+              return;
+            }
+
+            auth
+              .signInWithEmailAndPassword(
+                vendorAuthEmail(creds.id),
+                creds.password,
+              )
+              .catch(() => {
+                window.location.replace("vendor-login.html");
+              });
+            return;
+          }
+
+          realtimeInitialized = true;
           setupVendorMenuRealtime();
           setupVendorOrdersRealtime();
         });
@@ -3572,32 +3619,37 @@
 
         db.collection("orders")
           .orderBy("createdAt", "desc")
-          .onSnapshot((snapshot) => {
-            const firebaseOrders = snapshot.docs.map((doc) => {
-              const data = doc.data();
-              const createdAt = data.createdAt
-                ? data.createdAt.toDate()
-                : new Date();
-              return {
-                id: doc.id,
-                ...data,
-                status: data.status || "pending",
-                time: createdAt.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-                name: data.student || "Guest",
-                token: data.token || "N/A",
-                payment: data.payment || "Unpaid",
-                isPaid: data.isPaid || false,
-              };
-            });
+          .onSnapshot(
+            (snapshot) => {
+              const firebaseOrders = snapshot.docs.map((doc) => {
+                const data = doc.data();
+                const createdAt = data.createdAt
+                  ? data.createdAt.toDate()
+                  : new Date();
+                return {
+                  id: doc.id,
+                  ...data,
+                  status: data.status || "pending",
+                  time: createdAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                  name: data.student || "Guest",
+                  token: data.token || "N/A",
+                  payment: data.payment || "Unpaid",
+                  isPaid: data.isPaid || false,
+                };
+              });
 
-            orders = firebaseOrders;
-            renderQueue();
-            renderKOT();
-            renderBilling();
-          });
+              orders = firebaseOrders;
+              renderQueue();
+              renderKOT();
+              renderBilling();
+            },
+            () => {
+              window.location.replace("vendor-login.html");
+            },
+          );
       }
 
       // Status updates via updateOrder() function which calls Firebase directly
