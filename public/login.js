@@ -22,12 +22,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
+    apiKey: "AIzaSyBUpMBnUXZIRD-fjg7RT8CIJ1wMylxwS80",
     authDomain: "food-court-app-ae48f.firebaseapp.com",
     projectId: "food-court-app-ae48f",
-    storageBucket: "food-court-app-ae48f.appspot.com",
+    storageBucket: "food-court-app-ae48f.firebasestorage.app",
     messagingSenderId: "575018100354",
-    appId: "YOUR_APP_ID",
+    appId: "1:575018100354:web:e2bbbfd644748e7077769b",
   };
 
   let auth = null;
