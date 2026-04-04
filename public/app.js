@@ -867,35 +867,58 @@ function generateToken() {
   createAndTrackOrder(total, "Cash");
 }
 
+function getNextTokenNumber() {
+  const counterRef = db.collection("meta").doc("tokenCounter");
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(counterRef);
+    const data = snapshot.exists ? snapshot.data() : null;
+    const current =
+      data && Number.isInteger(data.nextToken) ? data.nextToken : 0;
+
+    transaction.set(
+      counterRef,
+      {
+        nextToken: current + 1,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    return current;
+  });
+}
+
 // helper to add order to Firebase (real-time vendor updates) - no localStorage
 function saveOrderToStorage(order) {
   if (!db || !db.collection) {
     return Promise.reject(new Error("Firestore is not configured"));
   }
 
-  const token = Math.floor(1000 + Math.random() * 9000); // 4-digit token
-  return db
-    .collection("orders")
-    .add({
-      items: order.items,
-      total: order.total,
-      status: "pending", // Initial status - will flow: pending → preparing → ready → completed
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      student: order.name,
-      userId: order.userId,
-      token,
-      payment: order.payment,
-    })
-    .then((docRef) => ({
-      ...order,
-      id: docRef.id,
-      token,
-      status: "pending",
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    }));
+  return getNextTokenNumber().then((token) =>
+    db
+      .collection("orders")
+      .add({
+        items: order.items,
+        total: order.total,
+        status: "pending", // Initial status - will flow: pending → preparing → ready → completed
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        student: order.name,
+        userId: order.userId,
+        token,
+        payment: order.payment,
+      })
+      .then((docRef) => ({
+        ...order,
+        id: docRef.id,
+        token,
+        status: "pending",
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      })),
+  );
 }
 
 function hydrateTokenView(order) {

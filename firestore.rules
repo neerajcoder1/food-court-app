@@ -61,6 +61,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── TOKEN COUNTER ──
+    // Used to generate sequential token numbers (0..n).
+    match /meta/tokenCounter {
+      allow read, write: if signedIn();
+    }
+
     // Deny all other operations
     match /{document=**} {
       allow read: if false;
