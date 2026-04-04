@@ -292,8 +292,10 @@
                 <input type="radio" name="payment" value="online" checked />
                 <div class="card-content">
                   <span class="method-icon">💳</span>
-                  <span class="method-name">Pay Online</span>
-                  <span class="method-desc">UPI / Cards / Netbanking</span>
+                  <span class="method-name">Pay by Vendor QR</span>
+                  <span class="method-desc"
+                    >Scan vendor UPI QR and confirm payment</span
+                  >
                 </div>
               </label>
               <label class="payment-card">
@@ -475,15 +477,15 @@
         </div>
       </section>
 
-      <!-- Razorpay Style Modal -->
+      <!-- Vendor UPI Payment Modal -->
       <div id="razorpay-modal" class="modal-overlay">
         <div class="razor-modal">
           <div class="razor-header">
             <div class="razor-brand">
-              <span class="razor-logo">RP</span>
+              <span class="razor-logo">₹</span>
               <div>
-                <div class="razor-name">Razorpay</div>
-                <div class="razor-secured">Secured by Razorpay</div>
+                <div class="razor-name">Vendor UPI Payment</div>
+                <div class="razor-secured">Scan and pay to the counter QR</div>
               </div>
             </div>
             <div class="razor-amount">
@@ -496,19 +498,23 @@
 
           <div class="razor-body">
             <div class="razor-section">
-              <div class="razor-section-title">CARDS / UPI / NETBANKING</div>
-              <div class="razor-opt active" onclick="selectRazorOpt(this)">
-                <span class="opt-icon">⚡</span>
-                <div>
-                  <div class="opt-main">UPI</div>
-                  <div class="opt-sub">Google Pay, PhonePe, Any UPI App</div>
+              <div class="razor-section-title">PAY DIRECTLY TO VENDOR</div>
+
+              <div class="vendor-payment-box">
+                <img
+                  src="vendor-payment-qr.png"
+                  alt="Vendor UPI payment QR"
+                  class="vendor-payment-qr"
+                  onerror="this.src = 'vendor-qr.png'"
+                />
+                <div class="vendor-payment-note">
+                  Use GPay / PhonePe / Paytm and complete payment.
                 </div>
-              </div>
-              <div class="razor-opt" onclick="selectRazorOpt(this)">
-                <span class="opt-icon">🏛️</span>
-                <div>
-                  <div class="opt-main">Netbanking</div>
-                  <div class="opt-sub">All Indian Banks</div>
+                <div class="vendor-namaste-row">
+                  <span class="vendor-namaste-icon">🙏</span>
+                  <span class="vendor-namaste-text">
+                    Vendor requests payment before order confirmation
+                  </span>
                 </div>
               </div>
             </div>
@@ -516,9 +522,9 @@
             <button
               class="razor-pay-btn"
               id="razor-pay-btn"
-              onclick="processRazorPay()"
+              onclick="confirmVendorQrPayment()"
             >
-              <span id="razor-btn-text">PAY NOW</span>
+              <span id="razor-btn-text">I HAVE PAID</span>
               <div class="razor-spinner" id="razor-spinner"></div>
             </button>
           </div>
@@ -536,7 +542,7 @@
                 color: #aaa;
               "
             >
-              🔒 SSL SECURED
+              ✅ Vendor will verify payment
             </div>
           </div>
         </div>

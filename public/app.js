@@ -794,71 +794,20 @@ function selectRazorOpt(el) {
 }
 
 async function processRazorPay() {
-  try {
-    const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  confirmVendorQrPayment();
+}
 
-    // create order from backend
-    const orderRes = await fetch(`${BASE_URL}/api/create-order`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ amount: total }),
-    });
-
-    const order = await orderRes.json();
-
-    // get razorpay key
-    const keyRes = await fetch(`${BASE_URL}/api/get-key`);
-    const { key } = await keyRes.json();
-
-    const options = {
-      key: key,
-      amount: order.amount,
-      currency: "INR",
-      name: "Food Court",
-      description: "Food Order Payment",
-      order_id: order.id,
-
-      handler: async function (response) {
-        const verifyRes = await fetch(`${BASE_URL}/api/verify-payment`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            amount: total,
-          }),
-        });
-
-        const result = await verifyRes.json();
-
-        if (result.success) {
-          closeRazorModal();
-          handlePaymentSuccess(total);
-        } else {
-          showToast("Payment verification failed");
-        }
-      },
-
-      prefill: {
-        name: "User",
-      },
-
-      theme: {
-        color: "#3399cc",
-      },
-    };
-
-    const rzp = new Razorpay(options);
-    rzp.open();
-  } catch (error) {
-    console.error(error);
-    showToast("Payment failed");
+function confirmVendorQrPayment() {
+  const totalText = document.getElementById("razor-total").innerText || "₹0";
+  const total = Number(totalText.replace(/[^0-9.]/g, "")) || 0;
+  if (!total) {
+    showToast("Invalid total amount. Please try again.");
+    return;
   }
+
+  closeRazorModal();
+  showToast("Payment marked as completed. Vendor will verify at counter.");
+  handlePaymentSuccess(total);
 }
 
 function handlePaymentSuccess(total) {
@@ -907,11 +856,7 @@ function confirmOrder() {
     document.querySelector('input[name="payment"]:checked').value === "online";
 
   if (isOnline) {
-    if (typeof window.Razorpay !== "function") {
-      showToast("Razorpay SDK not loaded. Please refresh and try again.");
-      return;
-    }
-    processRazorPay();
+    openRazorModal();
   } else {
     generateToken();
   }
