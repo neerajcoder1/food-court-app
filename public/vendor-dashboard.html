@@ -428,6 +428,23 @@
         gap: 12px;
       }
 
+      .orders-toggle-btn {
+        border-radius: 999px;
+        padding: 6px 12px;
+      }
+
+      .orders-toggle-btn.orders-open {
+        background: var(--green-soft);
+        color: var(--green);
+        border-color: rgba(34, 197, 94, 0.45);
+      }
+
+      .orders-toggle-btn.orders-paused {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-color: rgba(249, 115, 22, 0.5);
+      }
+
       .topbar-time {
         font-size: 12px;
         color: var(--muted);
@@ -1854,6 +1871,13 @@
         <div class="topbar-title" id="topbar-title">Order Queue</div>
         <div class="topbar-right">
           <button
+            class="btn orders-toggle-btn"
+            id="orders-toggle-btn"
+            onclick="toggleOrdersOpen()"
+          >
+            ⏸ Pause Orders
+          </button>
+          <button
             class="btn"
             id="theme-toggle-btn"
             onclick="toggleTheme()"
@@ -2629,6 +2653,9 @@
       let db = null;
       let auth = null;
       let realtimeInitialized = false;
+      let runtimeControlInitialized = false;
+      let ordersOpen = true;
+      let runtimeUnsubscribe = null;
       if (typeof firebase !== "undefined") {
         if (!firebase.apps.length) {
           firebase.initializeApp(firebaseConfig);
@@ -3069,7 +3096,70 @@
           realtimeInitialized = true;
           setupVendorMenuRealtime();
           setupVendorOrdersRealtime();
+          setupRuntimeControlRealtime();
         });
+      }
+
+      function setupRuntimeControlRealtime() {
+        if (!db || !db.collection || runtimeControlInitialized) {
+          return;
+        }
+
+        runtimeControlInitialized = true;
+        runtimeUnsubscribe = db
+          .collection("meta")
+          .doc("runtime")
+          .onSnapshot(
+            (doc) => {
+              const data = doc.exists ? doc.data() : null;
+              ordersOpen = !(data && data.ordersOpen === false);
+              updateOrdersToggleButton();
+            },
+            () => {
+              updateOrdersToggleButton();
+            },
+          );
+      }
+
+      function updateOrdersToggleButton() {
+        const btn = document.getElementById("orders-toggle-btn");
+        if (!btn) return;
+
+        btn.classList.remove("orders-open", "orders-paused");
+        if (ordersOpen) {
+          btn.classList.add("orders-open");
+          btn.innerText = "⏸ Pause Orders";
+        } else {
+          btn.classList.add("orders-paused");
+          btn.innerText = "▶ Resume Orders";
+        }
+      }
+
+      function toggleOrdersOpen() {
+        if (!db || !db.collection) {
+          showToast("Firestore is not configured on vendor dashboard");
+          return;
+        }
+
+        const user = auth && auth.currentUser;
+        const nextValue = !ordersOpen;
+
+        db.collection("meta")
+          .doc("runtime")
+          .set(
+            {
+              ordersOpen: nextValue,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              updatedBy: (user && user.email) || "vendor",
+            },
+            { merge: true },
+          )
+          .then(() => {
+            showToast(nextValue ? "Orders resumed" : "New orders paused");
+          })
+          .catch(() => {
+            showToast("Unable to update order state");
+          });
       }
 
       // ── THEME ──

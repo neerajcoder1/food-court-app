@@ -35,6 +35,8 @@ let activeTrackedOrderId = null;
 let menuUnsubscribe = null;
 let orderTrackingUnsubscribe = null;
 let historyUnsubscribe = null;
+let runtimeUnsubscribe = null;
+let ordersOpen = true;
 
 // --- Config ---
 const STORAGE_KEY = "cffms_menu";
@@ -48,7 +50,52 @@ document.addEventListener("DOMContentLoaded", () => {
   startOrderTracking(); // Check for active order tracking on load
   initCustomSelect(); // Init custom role selector
   applyViewFromQuery();
+  initRuntimeConfigListener();
 });
+
+function initRuntimeConfigListener() {
+  if (!db || !db.collection) {
+    return;
+  }
+
+  if (runtimeUnsubscribe) {
+    runtimeUnsubscribe();
+    runtimeUnsubscribe = null;
+  }
+
+  runtimeUnsubscribe = db
+    .collection("meta")
+    .doc("runtime")
+    .onSnapshot(
+      (doc) => {
+        const data = doc.exists ? doc.data() : null;
+        ordersOpen = !(data && data.ordersOpen === false);
+        updateOrderAvailabilityUI();
+      },
+      () => {
+        ordersOpen = true;
+        updateOrderAvailabilityUI();
+      },
+    );
+}
+
+function updateOrderAvailabilityUI() {
+  const btn = document.getElementById("confirm-order-btn");
+  const note = document.getElementById("orders-paused-note");
+
+  if (btn) {
+    btn.disabled = !ordersOpen;
+    btn.innerText = ordersOpen
+      ? "Confirm Order & Pay"
+      : "Orders Temporarily Paused";
+  }
+
+  if (note) {
+    note.innerText = ordersOpen
+      ? ""
+      : "Vendor paused new orders for a short time. Please try again in a few minutes.";
+  }
+}
 
 // --- User Accounts Management ---
 const ACCOUNTS_KEY = "cffms_accounts";
@@ -951,6 +998,11 @@ function createAndTrackOrder(total, paymentMode, paymentMeta = {}) {
 }
 
 function confirmOrder() {
+  if (!ordersOpen) {
+    showToast("Orders are temporarily paused by vendor.");
+    return;
+  }
+
   const isOnline =
     document.querySelector('input[name="payment"]:checked').value === "online";
 
