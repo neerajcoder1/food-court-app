@@ -75,9 +75,33 @@ document.addEventListener("DOMContentLoaded", () => {
       activeVendor.id &&
       isVendorInUserAccounts(activeVendor.id));
 
-  if (hasValidVendorSession) {
-    window.location.replace("vendor-dashboard.html");
-    return;
+  if (hasValidVendorSession && auth) {
+    const sessionVendorId =
+      (activeUser && activeUser.role === "vendor" && activeUser.id) ||
+      (activeVendor && activeVendor.id) ||
+      null;
+
+    if (auth.currentUser) {
+      window.location.replace("vendor-dashboard.html");
+      return;
+    }
+
+    const existingVendor = getAccounts().find((a) => a.id === sessionVendorId);
+    if (existingVendor && existingVendor.password) {
+      auth
+        .signInWithEmailAndPassword(
+          vendorAuthEmail(existingVendor.id),
+          existingVendor.password,
+        )
+        .then(() => {
+          window.location.replace("vendor-dashboard.html");
+        })
+        .catch(() => {
+          sessionStorage.removeItem("cffms_vendor");
+          localStorage.removeItem("cffms_user");
+          localStorage.removeItem("role");
+        });
+    }
   }
 
   form.addEventListener("submit", (e) => {

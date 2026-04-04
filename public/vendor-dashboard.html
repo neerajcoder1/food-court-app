@@ -7,10 +7,6 @@
 
     <!-- Auth Guard -->
     <script>
-      if (localStorage.getItem("role") !== "vendor") {
-        window.location.href = "/vendor-login.html";
-      }
-
       (function guardVendorAccess() {
         function safeParse(value) {
           try {
@@ -3647,7 +3643,9 @@
               renderBilling();
             },
             () => {
-              window.location.replace("vendor-login.html");
+              console.warn(
+                "Orders listener failed. Waiting for next auth/session state.",
+              );
             },
           );
       }
